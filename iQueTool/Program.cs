@@ -124,7 +124,7 @@ namespace iQueTool
             filePath = extraArgs[1];
 
             if (mode == "tickets")
-                ModeArrayFile<iQueETicket>();
+                ModeArrayFile<iQueTitleData>();
             else if (mode == "certs")
                 ModeArrayFile<iQueCertificate>();
             else if (mode == "crl")
@@ -261,8 +261,8 @@ namespace iQueTool
 
             for(int i = 0; i < arrayFile.Count; i++)
             {
-                if (type == typeof(iQueETicket))
-                    arrayFile[i] = (T)(object)((iQueETicket)(object)arrayFile[i]).EndianSwap();
+                if (type == typeof(iQueTitleData))
+                    arrayFile[i] = (T)(object)((iQueTitleData)(object)arrayFile[i]).EndianSwap();
                 else if (type == typeof(iQueCertificate))
                     arrayFile[i] = (T)(object)((iQueCertificate)(object)arrayFile[i]).EndianSwap();
                 else if (type == typeof(iQueCertificateRevocation))
@@ -280,7 +280,7 @@ namespace iQueTool
                 Console.WriteLine($"Wrote {type.Name} info to {filePath}.txt");
             }
             
-            if((!String.IsNullOrEmpty(extractContentIds) || !String.IsNullOrEmpty(extractTIDs)) && type != typeof(iQueETicket))
+            if((!String.IsNullOrEmpty(extractContentIds) || !String.IsNullOrEmpty(extractTIDs)) && type != typeof(iQueTitleData))
             {
                 Console.WriteLine("Warning: using -xc or -xt in wrong mode");
                 Console.WriteLine("(those params are only valid for the \"ticket\" mode)");
@@ -305,7 +305,7 @@ namespace iQueTool
                     extractEntries = arrayFile;
                 else
                 {
-                    if (!String.IsNullOrEmpty(extractContentIds) && type == typeof(iQueETicket))
+                    if (!String.IsNullOrEmpty(extractContentIds) && type == typeof(iQueTitleData))
                     {
                         var ids = extractContentIds.Split(',');
                         foreach (var id in ids)
@@ -317,7 +317,7 @@ namespace iQueTool
                                 continue;
                             }
 
-                            var tickets = arrayFile.FindAll(t => ((iQueETicket)(object)t).TitleData.ContentId == intID);
+                            var tickets = arrayFile.FindAll(t => ((iQueTitleData)(object)t).Ticket.ContentId == intID);
                             if (tickets.Count <= 0)
                             {
                                 Console.WriteLine($"extractContentIds: failed to find ticket with content ID {id}!");
@@ -329,7 +329,7 @@ namespace iQueTool
                         }
                     }
 
-                    if (!String.IsNullOrEmpty(extractTIDs) && type == typeof(iQueETicket))
+                    if (!String.IsNullOrEmpty(extractTIDs) && type == typeof(iQueTitleData))
                     {
                         var ids = extractTIDs.Split(',');
                         foreach (var id in ids)
@@ -341,7 +341,7 @@ namespace iQueTool
                                 continue;
                             }
 
-                            var tickets = arrayFile.FindAll(t => ((iQueETicket)(object)t).TitleId == intID);
+                            var tickets = arrayFile.FindAll(t => ((iQueTitleData)(object)t).TitleId == intID);
                             if (tickets.Count <= 0)
                             {
                                 Console.WriteLine($"extractTIDs: failed to find ticket with TID {id}!");
@@ -396,11 +396,11 @@ namespace iQueTool
                         var entryType = "unk";
                         var name = i.ToString();
                         byte[] data = null;
-                        if (type == typeof(iQueETicket))
+                        if (type == typeof(iQueTitleData))
                         {
                             entryType = "ticket";
-                            name = ((iQueETicket)(object)entry).TicketUID;
-                            data = ((iQueETicket)(object)entry).GetBytes();
+                            name = ((iQueTitleData)(object)entry).TicketUID;
+                            data = ((iQueTitleData)(object)entry).GetBytes();
                         }
                         else if (type == typeof(iQueCertificate))
                         {
@@ -435,10 +435,10 @@ namespace iQueTool
                             var entry = extractEntries[i];
                             var name = i.ToString();
                             byte[] data = null;
-                            if (type == typeof(iQueETicket))
+                            if (type == typeof(iQueTitleData))
                             {
-                                name = ((iQueETicket)(object)entry).TicketUID;
-                                data = ((iQueETicket)(object)entry).GetBytes();
+                                name = ((iQueTitleData)(object)entry).TicketUID;
+                                data = ((iQueTitleData)(object)entry).GetBytes();
                             }
                             else if (type == typeof(iQueCertificate))
                             {

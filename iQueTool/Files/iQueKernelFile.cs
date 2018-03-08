@@ -37,7 +37,7 @@ namespace iQueTool.Files
             SA1SigArea = io.Reader.ReadStruct<iQueSysAppSigArea>();
             SA1SigArea.EndianSwap();
 
-            var sa2pos = startAddr + SIGAREA_END_ADDR + SA1SigArea.TitleData.ContentSize;
+            var sa2pos = startAddr + SIGAREA_END_ADDR + SA1SigArea.Ticket.ContentSize;
             if(sa2pos + SIGAREA_SZ < io.Stream.Length) // make sure this stream contains the SA2 sigarea
             {
                 io.Stream.Position = sa2pos;
@@ -70,18 +70,18 @@ namespace iQueTool.Files
         {
             io.Stream.Position = startAddr + SIGAREA_ADDR;
             byte[] sa1sig = io.Reader.ReadBytes(SIGAREA_SZ);
-            byte[] sa1 = io.Reader.ReadBytes((int)SA1SigArea.TitleData.ContentSize);
+            byte[] sa1 = io.Reader.ReadBytes((int)SA1SigArea.Ticket.ContentSize);
 
-            File.WriteAllBytes(extPath + $".{SA1SigArea.TitleData.ContentId}-sa1sig", sa1sig);
+            File.WriteAllBytes(extPath + $".{SA1SigArea.Ticket.ContentId}-sa1sig", sa1sig);
             if(sa1.Length > 0)
-                File.WriteAllBytes(extPath + $".{SA1SigArea.TitleData.ContentId}-sa1", sa1);
+                File.WriteAllBytes(extPath + $".{SA1SigArea.Ticket.ContentId}-sa1", sa1);
             if (HasSA2)
             {
                 byte[] sa2sig = io.Reader.ReadBytes(SIGAREA_SZ);
-                byte[] sa2 = io.Reader.ReadBytes((int)SA2SigArea.TitleData.ContentSize);
-                File.WriteAllBytes(extPath + $".{SA2SigArea.TitleData.ContentId}-sa2sig", sa2sig);
+                byte[] sa2 = io.Reader.ReadBytes((int)SA2SigArea.Ticket.ContentSize);
+                File.WriteAllBytes(extPath + $".{SA2SigArea.Ticket.ContentId}-sa2sig", sa2sig);
                 if (sa2.Length > 0)
-                    File.WriteAllBytes(extPath + $".{SA2SigArea.TitleData.ContentId}-sa2", sa2);
+                    File.WriteAllBytes(extPath + $".{SA2SigArea.Ticket.ContentId}-sa2", sa2);
             }
         }
     }

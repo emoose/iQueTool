@@ -64,7 +64,7 @@ namespace iQueTool.Files
         public bool HasPrivateData = false;
         public iQuePrivateData PrivateData; // depot.sys
         
-        public iQueArrayFile<iQueETicket> Tickets; // ticket.sys
+        public iQueArrayFile<iQueTitleData> Tickets; // ticket.sys
         public iQueArrayFile<iQueCertificateRevocation> CRL; // crl.sys
         public iQueCertCollection Certs; // cert.sys
 
@@ -171,7 +171,7 @@ namespace iQueTool.Files
             if(idx >= 0)
             {
                 var data = GetInodeData(MainFsInodes[idx]);
-                Tickets = new iQueArrayFile<iQueETicket>(data);
+                Tickets = new iQueArrayFile<iQueTitleData>(data);
                 for (int i = 0; i < Tickets.Count; i++)
                     Tickets[i] = Tickets[i].EndianSwap();
             }
@@ -346,12 +346,12 @@ namespace iQueTool.Files
 
             if (Tickets != null)
             {
-                b.AppendLine($"Num iQueETicket entries: {Tickets.Count}");
+                b.AppendLine($"Num tickets: {Tickets.Count}");
                 for (int i = 0; i < Tickets.Count; i++)
-                    b.AppendLine(Tickets[i].ToString(formatted, $"iQueETicket-{i}"));
+                    b.AppendLine(Tickets[i].ToString(formatted, $"iQueTitleData-{i}"));
             }
             else
-                b.AppendLine("Failed to read iQueETicket array from ticket.sys :(");
+                b.AppendLine("Failed to read iQueTitleData array from ticket.sys :(");
 
             if (CRL != null)
                 b.AppendLine(CRL.ToString(formatted));

@@ -15,7 +15,7 @@ namespace iQueTool.Structs
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct iQueSysAppSigArea
     {
-        public iQueTitleData TitleData;
+        public iQueETicket Ticket;
         public iQueCertificate Certificate;
         public iQueCertificate Authority;
         
@@ -33,7 +33,7 @@ namespace iQueTool.Structs
 
         public void EndianSwap()
         {
-            TitleData.EndianSwap();
+            Ticket.EndianSwap();
             Certificate.EndianSwap();
             Authority.EndianSwap();
 
@@ -68,7 +68,7 @@ namespace iQueTool.Structs
             b.AppendLineSpace(fmt + "Unk910:" + Environment.NewLine + fmt + Unk910.ToHexString());
 
             b.AppendLine();
-            b.AppendLine(TitleData.ToString(formatted, header + ".iQueTitleData"));
+            b.AppendLine(Ticket.ToString(formatted, header + ".iQueETicket"));
             b.AppendLine();
             b.AppendLine(Certificate.ToString(formatted, header + ".iQueCertificate"));
             b.AppendLine();
