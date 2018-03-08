@@ -2,7 +2,7 @@ iQueTool
 ========
 
 ```
-iQueTool 0.1: iQue Player file manipulator
+iQueTool 0.1a: iQue Player file manipulator
 Usage  : iquetool.exe [mode] [parameters] [filepath]
 
 Valid modes: nand / tickets / certs / crl
@@ -30,6 +30,7 @@ Mode "nand" Parameters:
    -x - extracts all files from NAND
    -xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes
    -xk (-extractkernel) - extract secure-kernel from NAND
+   -fs (-showallfs) - shows info about all found FS blocks
 
    -sc (-skipchecksums) - skip verifying FS checksums
    -bd (-baddump) - will try reading inodes with a 0x10 byte offset
