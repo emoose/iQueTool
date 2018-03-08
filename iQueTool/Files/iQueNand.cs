@@ -22,18 +22,41 @@ namespace iQueTool.Files
         public int InodesOffset = 0; // only public ique dump is sorta mangled, inodes start 0x10 bytes away from where they should for some reason
         public bool SkipVerifyFsChecksums = false;
 
-        public List<iQueFsHeader> FsHeaders;
         public List<int> FsBlocks;
         public List<int> FsBadBlocks;
 
-        public iQueFsHeader MainFs;
-        public int MainFsBlock;
-
-        public List<iQueFsInode> Inodes;
-
+        // todo: put next 3 fields in an iQueNandFs class?
+        public List<iQueFsHeader> FsHeaders;
         // read table as signed so we can treat end-of-chain and sys-allocated blocks as negative numbers
         // if there were more than 0x8000 blocks in a nand we really shouldn't do this, but luckily there aren't
-        private List<short> AllocationTable;
+        public List<List<short>> FsAllocationTables;
+        public List<List<iQueFsInode>> FsInodes;
+
+        public iQueFsHeader MainFs;
+        public int MainFsBlock;
+        public int MainFsIndex = -1;
+
+        public List<iQueFsInode> MainFsInodes
+        {
+            get
+            {
+                if (MainFsIndex < 0)
+                    return null;
+
+                return FsInodes[MainFsIndex];
+            }
+        }
+
+        public List<short> MainFsAllocTable
+        {
+            get
+            {
+                if (MainFsIndex < 0)
+                    return null;
+
+                return FsAllocationTables[MainFsIndex];
+            }
+        }
 
         // different sections/files of the NAND
         public iQueKernelFile SKSA;
@@ -58,8 +81,11 @@ namespace iQueTool.Files
 
         public int GetInodeIdx(string fileName)
         {
-            for(int i = 0; i < Inodes.Count; i++)
-                if(Inodes[i].NameString.ToLower() == fileName.ToLower())
+            if (MainFsIndex < 0)
+                return -1;
+
+            for(int i = 0; i < MainFsInodes.Count; i++)
+                if(MainFsInodes[i].NameString.ToLower() == fileName.ToLower())
                     return i;
 
             return -1;
@@ -73,7 +99,7 @@ namespace iQueTool.Files
             do
             {
                 chain.Add(curBlock);
-                curBlock = AllocationTable[curBlock];
+                curBlock = MainFsAllocTable[curBlock];
             }
             while (curBlock >= 0 && (maxBlocks == int.MaxValue || chain.Count < maxBlocks)); // if curBlock is negative (eg 0xFFFD or 0xFFFF) stop following the chain
 
@@ -126,7 +152,7 @@ namespace iQueTool.Files
             int idx = GetInodeIdx("cert.sys");
             if (idx >= 0)
             {
-                var data = GetInodeData(Inodes[idx]);
+                var data = GetInodeData(MainFsInodes[idx]);
                 Certs = new iQueCertCollection(data);
                 if (iQueCertCollection.MainCollection == null)
                     iQueCertCollection.MainCollection = new iQueCertCollection(data); // MainCollection wasn't loaded already, so lets try loading it from this nand (yolo)
@@ -136,7 +162,7 @@ namespace iQueTool.Files
             HasPrivateData = idx >= 0;
             if(HasPrivateData)
             {
-                var data = GetInodeData(Inodes[idx]);
+                var data = GetInodeData(MainFsInodes[idx]);
                 PrivateData = Shared.BytesToStruct<iQuePrivateData>(data);
                 //PrivateData.EndianSwap();
             }
@@ -144,7 +170,7 @@ namespace iQueTool.Files
             idx = GetInodeIdx("ticket.sys");
             if(idx >= 0)
             {
-                var data = GetInodeData(Inodes[idx]);
+                var data = GetInodeData(MainFsInodes[idx]);
                 Tickets = new iQueArrayFile<iQueETicket>(data);
                 for (int i = 0; i < Tickets.Count; i++)
                     Tickets[i] = Tickets[i].EndianSwap();
@@ -153,7 +179,7 @@ namespace iQueTool.Files
             idx = GetInodeIdx("crl.sys");
             if (idx >= 0)
             {
-                var data = GetInodeData(Inodes[idx]);
+                var data = GetInodeData(MainFsInodes[idx]);
                 CRL = new iQueArrayFile<iQueCertificateRevocation>(data);
                 foreach (var crl in CRL)
                     crl.EndianSwap();
@@ -172,6 +198,8 @@ namespace iQueTool.Files
             FsHeaders = new List<iQueFsHeader>();
             FsBlocks = new List<int>();
             FsBadBlocks = new List<int>();
+            FsInodes = new List<List<iQueFsInode>>();
+            FsAllocationTables = new List<List<short>>();
 
             int latestSeqNo = -1;
             for (int i = 0; i < NUM_FAT_BLOCKS; i++)
@@ -192,43 +220,43 @@ namespace iQueTool.Files
                         continue; // bad FS checksum :(
                     }
 
+                FsHeaders.Add(header);
+                FsBlocks.Add(blockNum);
+
                 if (header.SeqNo > latestSeqNo)
                 {
                     MainFs = header;
                     MainFsBlock = blockNum;
+                    MainFsIndex = FsHeaders.Count - 1;
                     latestSeqNo = header.SeqNo;
                 }
 
-                FsHeaders.Add(header);
-                FsBlocks.Add(blockNum);
+                io.Stream.Position = blockNum * BLOCK_SZ;
+                var allocTable = new List<short>();
+                for (int y = 0; y < NUM_BLOCKS_IN_FAT; y++)
+                    allocTable.Add((short)(io.Reader.ReadUInt16().EndianSwap()));
+
+                int numEntries = NUM_FS_ENTRIES;
+                if (InodesOffset > 0)
+                {
+                    io.Stream.Position += InodesOffset; // skip weird truncated inode if needed
+                    numEntries--; // and now we'll have to read one less entry
+                }
+
+                // now begin reading inodes
+                var inodes = new List<iQueFsInode>();
+                for (int y = 0; y < numEntries; y++)
+                {
+                    var inode = io.Reader.ReadStruct<iQueFsInode>();
+                    inode.EndianSwap();
+                    inodes.Add(inode);
+                }
+
+                FsAllocationTables.Add(allocTable);
+                FsInodes.Add(inodes);
             }
 
-            if (latestSeqNo < 0)
-                return false; // failed to read a valid FS...
-
-            io.Stream.Position = (MainFsBlock * BLOCK_SZ);
-
-            AllocationTable = new List<short>();
-            for (int i = 0; i < NUM_BLOCKS_IN_FAT; i++)
-                AllocationTable.Add((short)(io.Reader.ReadUInt16().EndianSwap()));
-
-            int numEntries = NUM_FS_ENTRIES;
-            if (InodesOffset > 0)
-            {
-                io.Stream.Position += InodesOffset; // skip weird truncated inode if needed
-                numEntries--; // and now we'll have to read one less entry
-            }
-
-            // now begin reading inodes
-            Inodes = new List<iQueFsInode>();
-            for (int i = 0; i < numEntries; i++)
-            {
-                var inode = io.Reader.ReadStruct<iQueFsInode>();
-                inode.EndianSwap();
-                Inodes.Add(inode);
-            }
-
-            return true;
+            return latestSeqNo >= 0;
         }
 
         public bool VerifyFsChecksum(iQueFsHeader fatHeader, int fatBlockIdx)
@@ -259,20 +287,44 @@ namespace iQueTool.Files
             return ToString(false);
         }
 
-        public string ToString(bool formatted, bool fsInfoOnly = true)
+        public string ToString(bool formatted, bool fsInfoOnly = true, bool allFsInfo = false)
         {
             var b = new StringBuilder();
             b.AppendLine("iQueNand:");
 
-            b.AppendLine($"MainFs:");
+            b.AppendLine($"MainFs (@ 0x{(MainFsBlock * BLOCK_SZ):X}):");
             b.AppendLine($"  SeqNo: {MainFs.SeqNo}");
             b.AppendLine($"  CheckSum: {MainFs.CheckSum}");
+            b.AppendLine($"  NumFiles: {MainFsInodes.FindAll(s => s.Valid == 1).Count}");
             b.AppendLine();
-            for(int i = 0; i < Inodes.Count; i++)
+            for(int i = 0; i < MainFsInodes.Count; i++)
             {
-                if (Inodes[i].Valid != 1)
+                if (MainFsInodes[i].Valid != 1)
                     continue;
-                b.AppendLine("  " + Inodes[i].ToString(i));
+                b.AppendLine("  " + MainFsInodes[i].ToString(i));
+            }
+
+            if(allFsInfo)
+            {
+                for(int i = 0; i < FsHeaders.Count; i++)
+                {
+                    if (FsBlocks[i] == MainFsBlock)
+                        continue;
+
+                    b.AppendLine();
+
+                    b.AppendLine($"Fs-{i} (@ 0x{(FsBlocks[i] * BLOCK_SZ):X})");
+                    b.AppendLine($"  SeqNo: {FsHeaders[i].SeqNo}");
+                    b.AppendLine($"  CheckSum: {FsHeaders[i].CheckSum}");
+                    b.AppendLine($"  NumFiles: {FsInodes[i].FindAll(s => s.Valid == 1).Count}");
+                    b.AppendLine();
+                    for (int y = 0; y < FsInodes[i].Count; y++)
+                    {
+                        if (FsInodes[i][y].Valid != 1)
+                            continue;
+                        b.AppendLine("  " + FsInodes[i][y].ToString(y));
+                    }
+                }
             }
 
             if (fsInfoOnly)

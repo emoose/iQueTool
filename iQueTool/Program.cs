@@ -28,6 +28,8 @@ namespace iQueTool
         static bool skipVerifyChecksums = false;
         static bool isBadDump = false;
 
+        static bool showAllFsInfo = false;
+
         static string filePath = String.Empty;
 
         static void Main(string[] args)
@@ -51,6 +53,7 @@ namespace iQueTool
                 { "xi|extractids=", v => extractIDs = v },
 
                 { "xk|extractkernel", v => extractKernel = v != null },
+                { "fs|showallfs", v => showAllFsInfo = v != null },
 
                 { "sc|skipchecksums", v => skipVerifyChecksums = v != null },
                 { "bd|baddump", v => isBadDump = v != null },
@@ -60,7 +63,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.1: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.1a: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -94,6 +97,7 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-x - extracts all files from NAND");
                 Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes");
                 Console.WriteLine(fmt + "-xk (-extractkernel) - extract secure-kernel from NAND");
+                Console.WriteLine(fmt + "-fs (-showallfs) - shows info about all found FS blocks");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-sc (-skipchecksums) - skip verifying FS checksums");
                 Console.WriteLine(fmt + "-bd (-baddump) - will try reading inodes with a 0x10 byte offset");
@@ -147,11 +151,11 @@ namespace iQueTool
             }
 
             if(printInfo)
-                Console.WriteLine(nandFile.ToString(true));
+                Console.WriteLine(nandFile.ToString(true, true, showAllFsInfo));
 
             if(writeInfo)
             {
-                File.WriteAllText(filePath + ".txt", nandFile.ToString(true, false));
+                File.WriteAllText(filePath + ".txt", nandFile.ToString(true, false, showAllFsInfo));
                 Console.WriteLine($"Wrote detailed NAND info to {filePath}.txt");
             }
 
@@ -169,7 +173,7 @@ namespace iQueTool
                     Directory.CreateDirectory(outputFile);
 
                 int count = 0;
-                foreach (var file in nandFile.Inodes)
+                foreach (var file in nandFile.MainFsInodes)
                 {
                     if (!file.IsValid)
                         continue;
