@@ -55,6 +55,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="Structs\iQueBlockSpare.cs" />
     <Compile Include="Structs\iQueCertificate.cs" />
     <Compile Include="Structs\iQueCertificateRevocation.cs" />
     <Compile Include="Structs\iQueNandFs.cs" />

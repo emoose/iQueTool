@@ -69,16 +69,16 @@ namespace iQueTool
             {
                 Console.WriteLine("Usage  : iquetool.exe [mode] [parameters] [filepath]");
                 Console.WriteLine();
-                Console.WriteLine("Valid modes: nand / tickets / certs / crl"); // / privdata / kernel");
+                Console.WriteLine("Valid modes: nand / tickets / certs / crl / sparefix"); // / privdata / kernel");
                 Console.WriteLine();
-                Console.WriteLine("General Parameters:");
+                Console.WriteLine("General parameters:");
                 Console.WriteLine(fmt + "-h (-help) - print iquetool usage");
                 Console.WriteLine(fmt + "-i (-info) - print basic info about file");
                 Console.WriteLine(fmt + "-wi (-writeinfo) - write detailed info about file to [filepath].txt");
                 Console.WriteLine(fmt + "-o (-output) <output-path> - specify output filename/directory");
 
                 Console.WriteLine();
-                Console.WriteLine("Mode \"tickets\" / \"certs\" / \"crl\" Parameters:");
+                Console.WriteLine("Mode \"tickets\" / \"certs\" / \"crl\":");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-x - extracts all entries from file");
                 Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract entries with these indexes");
@@ -92,7 +92,7 @@ namespace iQueTool
                 Console.WriteLine("with the format <output-dir>\\ticket-<bbid>-<contentid>-<tid>.dat");
 
                 Console.WriteLine();
-                Console.WriteLine("Mode \"nand\" Parameters:");
+                Console.WriteLine("Mode \"nand\":");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-x - extracts all files from NAND");
                 Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes");
@@ -101,6 +101,11 @@ namespace iQueTool
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-sc (-skipchecksums) - skip verifying FS checksums");
                 Console.WriteLine(fmt + "-bd (-baddump) - will try reading inodes with a 0x10 byte offset");
+                Console.WriteLine();
+                Console.WriteLine("Mode \"sparefix\":");
+                Console.WriteLine(fmt + "fixes overdump / raw page-spare dumps to match BB block-spare dumps");
+                Console.WriteLine();
+                Console.WriteLine(fmt + "-o (-output) <output-path> - specify output filename (default: [input]_fixed)");
                 Console.WriteLine();
 
                 Console.WriteLine("iQue signature verification: " + (iQueCertCollection.MainCollection != null ? "enabled" : "disabled"));
@@ -126,12 +131,51 @@ namespace iQueTool
                 ModeArrayFile<iQueCertificateRevocation>();
             else if (mode == "nand")
                 ModeNAND();
+            else if (mode == "sparefix")
+                ModeSpareFix();
             else
             {
                 Console.WriteLine($"Invalid mode \"{mode}\".");
-                Console.WriteLine("Valid modes are: nand / tickets / certs / crl"); // / privdata / kernel");
+                Console.WriteLine("Valid modes are: nand / tickets / certs / crl / sparefix"); // / privdata / kernel");
                 return;
             }
+        }
+
+        static void ModeSpareFix()
+        {
+            if (string.IsNullOrEmpty(outputFile))
+                outputFile = filePath + "_fixed";
+            Console.WriteLine($"Reading spare from {filePath}...");
+            using (var fixedStream = new MemoryStream())
+            {
+                using (var reader = new BinaryReader(File.OpenRead(filePath)))
+                {
+                    int numSkip = 0;
+                    if (reader.BaseStream.Length == 1024 * 1024) // overdump, just skip 0xF0 after each read
+                        numSkip = 0xF0;
+                    else if (reader.BaseStream.Length == 1024 * 1024 * 2) // page-spare dump, we only want the spare of the last page in each block
+                    {
+                        numSkip = 0x1F0;
+                        reader.BaseStream.Position = 0x1F0;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Spare isn't overdump/page-spare dump?");
+                        return;
+                    }
+
+                    while(reader.BaseStream.Position < reader.BaseStream.Length)
+                    {
+                        byte[] spare = reader.ReadBytes(0x10);
+                        spare[6] = 0; // fix page-spare dump to match format of block-spare dump
+                        fixedStream.Write(spare, 0, 0x10);
+                        if(reader.BaseStream.Position < reader.BaseStream.Length) // with raw page-spare dumps we're at the end here, so check for that
+                            reader.BaseStream.Position += numSkip;
+                    }
+                }
+                File.WriteAllBytes(outputFile, fixedStream.ToArray());
+            }
+            Console.WriteLine($"Saved fixed spare to {outputFile}!");
         }
 
         static void ModeNAND()
