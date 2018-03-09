@@ -35,8 +35,6 @@ namespace iQueTool
         public void Dispose()
         {
             Stream.Dispose();
-            Reader.Dispose();
-            Writer.Dispose();
         }
 
         public bool AddBytes(long numBytes)

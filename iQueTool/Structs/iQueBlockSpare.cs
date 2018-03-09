@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace iQueTool.Structs
 {
@@ -10,6 +10,7 @@ namespace iQueTool.Structs
     // seems BB returns only the last page's spare data for each block read (0x20 pages per block), while setting 0x6 to 0x00 for some reason
     // when writing BB is sent all FF as spare data, the unit must be recalcing the ECC itself before writing?
     // spare is returned as all 00 for bad blocks
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct iQueBlockSpare
     {
         public byte Unk0;
@@ -17,7 +18,7 @@ namespace iQueTool.Structs
         public byte Unk2;
         public byte Unk3; // always FF?
         public byte Unk4; // always FF?
-        public byte BadBlockIndicator; // any bit unset means bad block (each bit is checked seperately.. each bit counts as 4 pages?)
+        public byte BadBlockIndicator; // any bit unset means bad block (each bit is checked seperately.. each bit counts as 4 pages (4 pages = each 2048-byte part?))
         public byte Unk6; // always 00? (0xFF in page spares)
         public byte Unk7; // always FF?
 
