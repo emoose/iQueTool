@@ -31,6 +31,7 @@ namespace iQueTool
         static bool showAllFsInfo = false;
 
         static string filePath = String.Empty;
+        static string extraPath = String.Empty;
 
         static void Main(string[] args)
         {
@@ -63,7 +64,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.1a: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.2: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -103,7 +104,9 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-bd (-baddump) - will try reading inodes with a 0x10 byte offset");
                 Console.WriteLine();
                 Console.WriteLine("Mode \"sparefix\":");
+                Console.WriteLine(fmt + "usage: sparefix [spare.bin path] <nand.bin path>");
                 Console.WriteLine(fmt + "fixes overdump / raw page-spare dumps to match BB block-spare dumps");
+                Console.WriteLine(fmt + "if nand.bin path is specified, will correct ECC using that nand");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-o (-output) <output-path> - specify output filename (default: [input]_fixed)");
                 Console.WriteLine();
@@ -122,6 +125,8 @@ namespace iQueTool
 
             string mode = extraArgs[0].ToLower();
             filePath = extraArgs[1];
+            if (extraArgs.Count > 2)
+                extraPath = extraArgs[2];
 
             if (mode == "tickets")
                 ModeArrayFile<iQueTitleData>();
@@ -146,31 +151,65 @@ namespace iQueTool
             if (string.IsNullOrEmpty(outputFile))
                 outputFile = filePath + "_fixed";
             Console.WriteLine($"Reading spare from {filePath}...");
+
             using (var fixedStream = new MemoryStream())
             {
                 using (var reader = new BinaryReader(File.OpenRead(filePath)))
                 {
-                    int numSkip = 0;
-                    if (reader.BaseStream.Length == 1024 * 1024) // overdump, just skip 0xF0 after each read
-                        numSkip = 0xF0;
-                    else if (reader.BaseStream.Length == 1024 * 1024 * 2) // page-spare dump, we only want the spare of the last page in each block
+                    if (reader.BaseStream.Length == 64 * 1024)
                     {
-                        numSkip = 0x1F0;
-                        reader.BaseStream.Position = 0x1F0;
+                        // must be a block-spare already, just copy it all to the fixed stream so we can fix up the ECC
+                        byte[] spare = reader.ReadBytes(64 * 1024);
+                        fixedStream.Write(spare, 0, 64 * 1024);
                     }
                     else
                     {
-                        Console.WriteLine("Spare isn't overdump/page-spare dump?");
-                        return;
+                        int numSkip = 0;
+                        if (reader.BaseStream.Length == 1024 * 1024) // overdump, just skip 0xF0 after each read
+                            numSkip = 0xF0;
+                        else if (reader.BaseStream.Length == 1024 * 1024 * 2) // page-spare dump, we only want the spare of the last page in each block
+                        {
+                            numSkip = 0x1F0;
+                            reader.BaseStream.Position = 0x1F0;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Spare isn't overdump/page-spare/block-spare dump?");
+                            return;
+                        }
+
+                        while (reader.BaseStream.Position < reader.BaseStream.Length)
+                        {
+                            byte[] spare = reader.ReadBytes(0x10);
+                            spare[6] = 0; // fix page-spare dump to match format of block-spare dump
+                            fixedStream.Write(spare, 0, 0x10);
+                            if (reader.BaseStream.Position < reader.BaseStream.Length) // with raw page-spare dumps we're at the end here, so check for that
+                                reader.BaseStream.Position += numSkip;
+                        }
                     }
 
-                    while(reader.BaseStream.Position < reader.BaseStream.Length)
+                    // if nand.bin is specified, read from it and correct the ECC
+                    if(!string.IsNullOrEmpty(extraPath))
                     {
-                        byte[] spare = reader.ReadBytes(0x10);
-                        spare[6] = 0; // fix page-spare dump to match format of block-spare dump
-                        fixedStream.Write(spare, 0, 0x10);
-                        if(reader.BaseStream.Position < reader.BaseStream.Length) // with raw page-spare dumps we're at the end here, so check for that
-                            reader.BaseStream.Position += numSkip;
+                        using (var nandReader = new BinaryReader(File.OpenRead(extraPath)))
+                        {
+                            int numBlocks = (int)(nandReader.BaseStream.Length / 0x4000);
+                            fixedStream.Position = 0;
+                            for (int blockNum = 0; blockNum < numBlocks; blockNum++)
+                            {
+                                fixedStream.Position = blockNum * 0x10;
+                                fixedStream.Position += 5;
+                                byte badBlock = (byte)fixedStream.ReadByte();
+                                if (badBlock == 0)
+                                    continue;
+                                fixedStream.Position += 2; // 0x8 into spare (ECC area)
+
+                                nandReader.BaseStream.Position = (blockNum * 0x4000) + 0x3E00; // last page in the block
+                                byte[] pageData = nandReader.ReadBytes(0x200);
+                                byte[] ecc = iQueBlockSpare.Calculate512Ecc(pageData);
+                                fixedStream.Write(ecc, 0, 8);
+                            }
+                        }
                     }
                 }
                 File.WriteAllBytes(outputFile, fixedStream.ToArray());
