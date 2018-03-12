@@ -215,7 +215,7 @@ namespace iQueTool
                                     fixedStream.WriteByte(sa2Blk);
 
                                 // SA1 nth block spare (block num of n-1 / previous SA data block)
-                                for (int curBlk = 2; curBlk < sa1NumBlks; curBlk++)
+                                for (int curBlk = 2; curBlk <= sa1NumBlks; curBlk++)
                                 {
                                     var curBlkNum = sa1Blk + curBlk;
                                     fixedStream.Position = curBlkNum * 0x10;
@@ -239,7 +239,7 @@ namespace iQueTool
                                         fixedStream.WriteByte(0xFF);
 
                                     // SA2 nth block spare (block num of n-1 / previous SA data block)
-                                    for (int curBlk = 2; curBlk < sa2NumBlks; curBlk++)
+                                    for (int curBlk = 2; curBlk <= sa2NumBlks; curBlk++)
                                     {
                                         var curBlkNum = sa2Blk + curBlk;
                                         fixedStream.Position = curBlkNum * 0x10;
