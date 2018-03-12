@@ -59,7 +59,7 @@ namespace iQueTool.Files
         }
 
         // different sections/files of the NAND
-        public iQueKernelFile SKSA;
+        public iQueKernel SKSA;
 
         public bool HasPrivateData = false;
         public iQuePrivateData PrivateData; // depot.sys
@@ -142,7 +142,7 @@ namespace iQueTool.Files
                 return false; // invalid image, maybe the NAND you downloaded needs to be trimmed from 0x3FFC0000 to 0x7FFC0000, for a perfect 0x40000000 byte image?
 
             io.Stream.Position = 0;
-            SKSA = new iQueKernelFile(io);
+            SKSA = new iQueKernel(io);
             SKSA.Read();
 
             var ret = ReadFilesystem();

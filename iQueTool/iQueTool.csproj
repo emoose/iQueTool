@@ -46,7 +46,7 @@
   <ItemGroup>
     <Compile Include="Files\iQueArrayFile.cs" />
     <Compile Include="Files\iQueCertCollection.cs" />
-    <Compile Include="Files\iQueKernelFile.cs" />
+    <Compile Include="Files\iQueKernel.cs" />
     <Compile Include="Files\iQueNand.cs" />
     <Compile Include="Natives.cs" />
     <Compile Include="Properties\Resources.Designer.cs">

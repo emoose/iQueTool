@@ -188,12 +188,69 @@ namespace iQueTool
                         }
                     }
 
-                    // if nand.bin is specified, read from it and correct the ECC
+                    // if nand.bin is specified, read from it and correct the spare data
                     if(!string.IsNullOrEmpty(extraPath))
                     {
-                        using (var nandReader = new BinaryReader(File.OpenRead(extraPath)))
+                        using (var nandIO = new IO(File.Open(extraPath, FileMode.Open)))
                         {
-                            int numBlocks = (int)(nandReader.BaseStream.Length / 0x4000);
+                            // fix SA-area spare bytes
+                            {
+                                var kernel = new iQueKernel(nandIO);
+                                kernel.Read();
+
+                                var sa1Blk = (byte)(kernel.SA1Addr / 0x4000);
+                                var sa1NumBlks = kernel.SA1SigArea.Ticket.ContentSize / 0x4000;
+
+                                var sa2Blk = (byte)(kernel.SA2IsValid ? kernel.SA2Addr / 0x4000 : -1);
+
+                                // SA1 license spare (write SA1 end block num)
+                                fixedStream.Position = sa1Blk * 0x10;
+                                var sa1EndBlk = (byte)(sa1Blk + sa1NumBlks);
+                                for (int i = 0; i < 3; i++)
+                                    fixedStream.WriteByte(sa1EndBlk);
+
+                                // SA1 1st block spare (block num of next SA license block)
+                                fixedStream.Position = (sa1Blk + 1) * 0x10;
+                                for (int i = 0; i < 3; i++)
+                                    fixedStream.WriteByte(sa2Blk);
+
+                                // SA1 nth block spare (block num of n-1 / previous SA data block)
+                                for (int curBlk = 2; curBlk < sa1NumBlks; curBlk++)
+                                {
+                                    var curBlkNum = sa1Blk + curBlk;
+                                    fixedStream.Position = curBlkNum * 0x10;
+                                    for (int i = 0; i < 3; i++)
+                                        fixedStream.WriteByte((byte)(curBlkNum - 1));
+                                }
+
+                                if (sa2Blk != 0xFF)
+                                {
+                                    var sa2NumBlks = kernel.SA2SigArea.Ticket.ContentSize / 0x4000;
+
+                                    // SA2 license spare (write SA2 end block num)
+                                    fixedStream.Position = sa2Blk * 0x10;
+                                    var sa2EndBlk = (byte)(sa2Blk + sa2NumBlks);
+                                    for (int i = 0; i < 3; i++)
+                                        fixedStream.WriteByte(sa2EndBlk);
+
+                                    // SA2 1st block spare (block num of next SA license block)
+                                    fixedStream.Position = (sa2Blk + 1) * 0x10;
+                                    for (int i = 0; i < 3; i++)
+                                        fixedStream.WriteByte(0xFF);
+
+                                    // SA2 nth block spare (block num of n-1 / previous SA data block)
+                                    for (int curBlk = 2; curBlk < sa2NumBlks; curBlk++)
+                                    {
+                                        var curBlkNum = sa2Blk + curBlk;
+                                        fixedStream.Position = curBlkNum * 0x10;
+                                        for (int i = 0; i < 3; i++)
+                                            fixedStream.WriteByte((byte)(curBlkNum - 1));
+                                    }
+                                }
+                            }
+
+                            // fix ECC bytes
+                            int numBlocks = (int)(nandIO.Stream.Length / 0x4000);
                             fixedStream.Position = 0;
                             for (int blockNum = 0; blockNum < numBlocks; blockNum++)
                             {
@@ -204,8 +261,8 @@ namespace iQueTool
                                     continue;
                                 fixedStream.Position += 2; // 0x8 into spare (ECC area)
 
-                                nandReader.BaseStream.Position = (blockNum * 0x4000) + 0x3E00; // last page in the block
-                                byte[] pageData = nandReader.ReadBytes(0x200);
+                                nandIO.Stream.Position = (blockNum * 0x4000) + 0x3E00; // last page in the block
+                                byte[] pageData = nandIO.Reader.ReadBytes(0x200);
                                 byte[] ecc = iQueBlockSpare.Calculate512Ecc(pageData);
                                 fixedStream.Write(ecc, 0, 8);
                             }

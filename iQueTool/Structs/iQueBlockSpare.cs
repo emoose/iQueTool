@@ -8,17 +8,27 @@ namespace iQueTool.Structs
 {
     // format of the BB-returned block-spare data, which seems slightly different to the actual on-chip page-spare data?
     // seems BB returns only the last page's spare data for each block read (0x20 pages per block), while setting 0x6 to 0x00 for some reason
-    // when writing BB is sent all FF as spare data, the unit must be recalcing the ECC itself before writing?
+
+    // when writing BB gets sent all FF as spare data (except for SA area, where first 3 bytes of spare are set by _bbc_writeSystemApp/wsa & __bbc_write_system_app)
+    // unit must be recalcing the ECC itself before writing?
+
     // spare is returned as all 00 for bad blocks
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct iQueBlockSpare
     {
-        public byte Unk0;
-        public byte Unk1;
-        public byte Unk2;
+        // next three are only set for SA license/ticket & SA data blocks
+        // seems to be set like
+        // SAx license block: block num of last SAx data block (set by __bbc_write_system_app)
+        // SAx block 1: block num of next SA license block, or 0xFF if theres no SA following this one (set by _bbc_writeSystemApp / wsa)
+        // SAx block n: block num of block n-1 (set by __bbc_write_system_app)
+        // block nums are treated as a single byte, copied to all three fields
+        public byte SAData_0;
+        public byte SAData_1;
+        public byte SAData_2;
+
         public byte Unk3; // always FF?
         public byte Unk4; // always FF?
-        public byte BadBlockIndicator; // any bit unset means bad block (each bit is checked seperately.. each bit counts as 4 pages (4 pages = each 2048-byte part?))
+        public byte BadBlockIndicator; // any bit unset means bad block (each bit is checked seperately.. each bit counts as 4 pages? (4 pages = each 2048-byte part?))
         public byte Unk6; // always 00? (0xFF in page spares)
         public byte Unk7; // always FF?
 
