@@ -30,6 +30,9 @@ namespace iQueTool
 
         static bool showAllFsInfo = false;
 
+        static string generateSparePath = String.Empty;
+        static bool generateFullSpare = false;
+
         static string filePath = String.Empty;
         static string extraPath = String.Empty;
 
@@ -56,6 +59,9 @@ namespace iQueTool
                 { "xk|extractkernel", v => extractKernel = v != null },
                 { "fs|showallfs", v => showAllFsInfo = v != null },
 
+                { "gs|genspare=", v => generateSparePath = v },
+                { "gp|fullspare", v => generateFullSpare = v != null },
+
                 { "sc|skipchecksums", v => skipVerifyChecksums = v != null },
                 { "bd|baddump", v => isBadDump = v != null },
 
@@ -64,7 +70,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.2: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.2a: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -100,15 +106,19 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-xk (-extractkernel) - extract secure-kernel from NAND");
                 Console.WriteLine(fmt + "-fs (-showallfs) - shows info about all found FS blocks");
                 Console.WriteLine();
+                Console.WriteLine(fmt + "-gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND");
+                Console.WriteLine(fmt + "-gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead");
+                Console.WriteLine();
                 Console.WriteLine(fmt + "-sc (-skipchecksums) - skip verifying FS checksums");
                 Console.WriteLine(fmt + "-bd (-baddump) - will try reading inodes with a 0x10 byte offset");
                 Console.WriteLine();
                 Console.WriteLine("Mode \"sparefix\":");
                 Console.WriteLine(fmt + "usage: sparefix [spare.bin path] <nand.bin path>");
                 Console.WriteLine(fmt + "fixes overdump / raw page-spare dumps to match BB block-spare dumps");
-                Console.WriteLine(fmt + "if nand.bin path is specified, will correct ECC using that nand");
+                Console.WriteLine(fmt + "if nand.bin path is specified, will correct the spare data using that nand");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-o (-output) <output-path> - specify output filename (default: [input]_fixed)");
+                Console.WriteLine(fmt + "-gp (-fullspare) - disables reducing page-spare data to block-spare");
                 Console.WriteLine();
 
                 Console.WriteLine("iQue signature verification: " + (iQueCertCollection.MainCollection != null ? "enabled" : "disabled"));
@@ -156,6 +166,7 @@ namespace iQueTool
             {
                 using (var reader = new BinaryReader(File.OpenRead(filePath)))
                 {
+                    bool isBlockSpare = true;
                     if (reader.BaseStream.Length == 64 * 1024)
                     {
                         // must be a block-spare already, just copy it all to the fixed stream so we can fix up the ECC
@@ -178,95 +189,41 @@ namespace iQueTool
                             return;
                         }
 
-                        while (reader.BaseStream.Position < reader.BaseStream.Length)
+                        if (generateFullSpare)
                         {
-                            byte[] spare = reader.ReadBytes(0x10);
-                            spare[6] = 0; // fix page-spare dump to match format of block-spare dump
-                            fixedStream.Write(spare, 0, 0x10);
-                            if (reader.BaseStream.Position < reader.BaseStream.Length) // with raw page-spare dumps we're at the end here, so check for that
-                                reader.BaseStream.Position += numSkip;
+                            if (numSkip != 0x1F0)
+                            {
+                                Console.WriteLine("Invalid spare used with -gp (-fullspare)");
+                                Console.WriteLine("This switch only works with page/block-spares, not overdumps!");
+                                return;
+                            }
+
+                            // user gave -gp switch, so just copy the whole page-spare instead of reducing to block-spare
+                            reader.BaseStream.Position = 0;
+                            byte[] spare = reader.ReadBytes(1024 * 1024 * 2);
+                            fixedStream.Write(spare, 0, 1024 * 1024 * 2);
+
+                            isBlockSpare = false;
                         }
+                        else
+                            while (reader.BaseStream.Position < reader.BaseStream.Length)
+                            {
+                                byte[] spare = reader.ReadBytes(0x10);
+                                spare[6] = 0; // fix page-spare dump to match format of block-spare dump
+                                fixedStream.Write(spare, 0, 0x10);
+                                if (reader.BaseStream.Position < reader.BaseStream.Length) // with raw page-spare dumps we're at the end here, so check for that
+                                    reader.BaseStream.Position += numSkip;
+                            }
                     }
 
                     // if nand.bin is specified, read from it and correct the spare data
                     if(!string.IsNullOrEmpty(extraPath))
                     {
-                        using (var nandIO = new IO(File.Open(extraPath, FileMode.Open)))
-                        {
-                            // fix SA-area spare bytes
-                            {
-                                var kernel = new iQueKernel(nandIO);
-                                kernel.Read();
-
-                                var sa1Blk = (byte)(kernel.SA1Addr / 0x4000);
-                                var sa1NumBlks = kernel.SA1SigArea.Ticket.ContentSize / 0x4000;
-
-                                var sa2Blk = (byte)(kernel.SA2IsValid ? kernel.SA2Addr / 0x4000 : -1);
-
-                                // SA1 license spare (write SA1 end block num)
-                                fixedStream.Position = sa1Blk * 0x10;
-                                var sa1EndBlk = (byte)(sa1Blk + sa1NumBlks);
-                                for (int i = 0; i < 3; i++)
-                                    fixedStream.WriteByte(sa1EndBlk);
-
-                                // SA1 1st block spare (block num of next SA license block)
-                                fixedStream.Position = (sa1Blk + 1) * 0x10;
-                                for (int i = 0; i < 3; i++)
-                                    fixedStream.WriteByte(sa2Blk);
-
-                                // SA1 nth block spare (block num of n-1 / previous SA data block)
-                                for (int curBlk = 2; curBlk <= sa1NumBlks; curBlk++)
-                                {
-                                    var curBlkNum = sa1Blk + curBlk;
-                                    fixedStream.Position = curBlkNum * 0x10;
-                                    for (int i = 0; i < 3; i++)
-                                        fixedStream.WriteByte((byte)(curBlkNum - 1));
-                                }
-
-                                if (sa2Blk != 0xFF)
-                                {
-                                    var sa2NumBlks = kernel.SA2SigArea.Ticket.ContentSize / 0x4000;
-
-                                    // SA2 license spare (write SA2 end block num)
-                                    fixedStream.Position = sa2Blk * 0x10;
-                                    var sa2EndBlk = (byte)(sa2Blk + sa2NumBlks);
-                                    for (int i = 0; i < 3; i++)
-                                        fixedStream.WriteByte(sa2EndBlk);
-
-                                    // SA2 1st block spare (block num of next SA license block)
-                                    fixedStream.Position = (sa2Blk + 1) * 0x10;
-                                    for (int i = 0; i < 3; i++)
-                                        fixedStream.WriteByte(0xFF);
-
-                                    // SA2 nth block spare (block num of n-1 / previous SA data block)
-                                    for (int curBlk = 2; curBlk <= sa2NumBlks; curBlk++)
-                                    {
-                                        var curBlkNum = sa2Blk + curBlk;
-                                        fixedStream.Position = curBlkNum * 0x10;
-                                        for (int i = 0; i < 3; i++)
-                                            fixedStream.WriteByte((byte)(curBlkNum - 1));
-                                    }
-                                }
-                            }
-
-                            // fix ECC bytes
-                            int numBlocks = (int)(nandIO.Stream.Length / 0x4000);
-                            fixedStream.Position = 0;
-                            for (int blockNum = 0; blockNum < numBlocks; blockNum++)
-                            {
-                                fixedStream.Position = blockNum * 0x10;
-                                fixedStream.Position += 5;
-                                byte badBlock = (byte)fixedStream.ReadByte();
-                                if (badBlock == 0)
-                                    continue;
-                                fixedStream.Position += 2; // 0x8 into spare (ECC area)
-
-                                nandIO.Stream.Position = (blockNum * 0x4000) + 0x3E00; // last page in the block
-                                byte[] pageData = nandIO.Reader.ReadBytes(0x200);
-                                byte[] ecc = iQueBlockSpare.Calculate512Ecc(pageData);
-                                fixedStream.Write(ecc, 0, 8);
-                            }
-                        }
+                        var nand = new iQueNand(extraPath);
+                        nand.Read();
+                        var fixedSpare = nand.GenerateSpareData(isBlockSpare, fixedStream.ToArray()); // todo: make a stream-based GenerateSpareData method?
+                        fixedStream.Position = 0;
+                        fixedStream.Write(fixedSpare, 0, fixedSpare.Length);
                     }
                 }
                 File.WriteAllBytes(outputFile, fixedStream.ToArray());
@@ -342,6 +299,12 @@ namespace iQueTool
                 File.WriteAllBytes(outputFile, nandFile.GetSKSAData());
 
                 Console.WriteLine($"Extracted SKSA to {outputFile}");
+            }
+
+            if(!string.IsNullOrEmpty(generateSparePath))
+            {
+                File.WriteAllBytes(generateSparePath, nandFile.GenerateSpareData(!generateFullSpare));
+                Console.WriteLine($"Wrote generated {(generateFullSpare ? "page" : "block")}-spare data to {generateSparePath}");
             }
         }
 

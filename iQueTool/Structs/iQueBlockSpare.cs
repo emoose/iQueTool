@@ -22,6 +22,11 @@ namespace iQueTool.Structs
         // SAx block 1: block num of next SA license block, or 0xFF if theres no SA following this one (set by _bbc_writeSystemApp / wsa)
         // SAx block n: block num of block n-1 (set by __bbc_write_system_app)
         // block nums are treated as a single byte, copied to all three fields
+
+        // i guess because of this it might be reading the SAs back to front?
+        // SA1 ticket block points to SA1 last block, which points to SA1 last block(-1) etc, until it gets around to the first SA1 data block, which then points to the SA2 ticket
+        // must be how it handles badblocks in the SA area?
+
         public byte SAData_0;
         public byte SAData_1;
         public byte SAData_2;

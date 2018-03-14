@@ -2,7 +2,7 @@ iQueTool
 ========
 
 ```
-iQueTool 0.2: iQue Player file manipulator
+iQueTool 0.2a: iQue Player file manipulator
 Usage  : iquetool.exe [mode] [parameters] [filepath]
 
 Valid modes: nand / tickets / certs / crl / sparefix
@@ -32,15 +32,19 @@ Mode "nand":
    -xk (-extractkernel) - extract secure-kernel from NAND
    -fs (-showallfs) - shows info about all found FS blocks
 
+   -gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND
+   -gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead
+
    -sc (-skipchecksums) - skip verifying FS checksums
    -bd (-baddump) - will try reading inodes with a 0x10 byte offset
 
 Mode "sparefix":
    usage: sparefix [spare.bin path] <nand.bin path>
    fixes overdump / raw page-spare dumps to match BB block-spare dumps
-   if nand.bin path is specified, will recalc ECC from that nand
+   if nand.bin path is specified, will correct the spare data using that nand
 
    -o (-output) <output-path> - specify output filename (default: [input]_fixed)
+   -gp (-fullspare) - disables reducing page-spare data to block-spare
 
 iQue signature verification:
    To enable, drop a cert.sys file (taken from an iQue NAND) next to the iQueTool exe

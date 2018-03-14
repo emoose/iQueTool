@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using iQueTool.Structs;
+using System.IO;
 
 namespace iQueTool.Files
 {
@@ -16,6 +17,8 @@ namespace iQueTool.Files
 
         public const int MAGIC_BBFS = 0x42424653;
         public const int MAGIC_BBFL = 0x4242464C;
+
+        public const short BBFS_ALLOC_BADBLOCK = -2; // 0xfffe for bad blocks
 
         private IO io;
         public string FilePath;
@@ -280,6 +283,134 @@ namespace iQueTool.Files
             var fatBlockIdx = FsBlocks[fsIndex];
 
             return VerifyFsChecksum(fatHeader, fatBlockIdx);
+        }
+
+        public byte[] GenerateSpareData(bool blockSpare, byte[] oldSpare = null)
+        {
+            int pageSkip = blockSpare ? 0x1F : 0; // block-spares only include the last page of each block
+
+            using (var fixedStream = new MemoryStream())
+            {
+                var numPages = io.Stream.Length / 0x200;
+                var numSpareEntries = blockSpare ? io.Stream.Length / 0x4000 : numPages;
+                var spareEntriesPerBlock = blockSpare ? 1 : 0x20;
+
+                if (oldSpare != null)
+                    fixedStream.Write(oldSpare, 0, oldSpare.Length);
+                else
+                {
+                    // init empty spare
+                    for (int i = 0; i < (numSpareEntries * 0x10); i++)
+                        fixedStream.WriteByte(0xFF);
+                }
+
+                // fix SA-area spare bytes
+                {
+                    var sa1Blk = (byte)(SKSA.SA1Addr / 0x4000);
+                    var sa1NumBlks = SKSA.SA1SigArea.Ticket.ContentSize / 0x4000;
+
+                    var sa2Blk = (byte)(SKSA.SA2IsValid ? SKSA.SA2Addr / 0x4000 : -1);
+
+                    // SA1 license spare (writes SA1 end block num)
+                    for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                    {
+                        fixedStream.Position = ((sa1Blk * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                        var sa1EndBlk = (byte)(sa1Blk + sa1NumBlks);
+                        for (int i = 0; i < 3; i++)
+                            fixedStream.WriteByte(sa1EndBlk);
+                    }
+
+                    // SA1 1st block spare (writes block num of next SA license block)
+                    for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                    {
+                        fixedStream.Position = (((sa1Blk + 1) * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                        for (int i = 0; i < 3; i++)
+                            fixedStream.WriteByte(sa2Blk);
+                    }
+
+                    // SA1 nth block spare (writes block num of n-1 / previous SA data block)
+                    for (int curBlk = 2; curBlk <= sa1NumBlks; curBlk++)
+                    {
+                        var curBlkNum = sa1Blk + curBlk;
+                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                        {
+                            fixedStream.Position = ((curBlkNum * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                            for (int i = 0; i < 3; i++)
+                                fixedStream.WriteByte((byte)(curBlkNum - 1));
+                        }
+                    }
+
+                    if (sa2Blk != 0xFF)
+                    {
+                        var sa2NumBlks = SKSA.SA2SigArea.Ticket.ContentSize / 0x4000;
+
+                        // SA2 license spare (writes SA2 end block num)
+                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                        {
+                            fixedStream.Position = ((sa2Blk * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                            var sa2EndBlk = (byte)(sa2Blk + sa2NumBlks);
+                            for (int i = 0; i < 3; i++)
+                                fixedStream.WriteByte(sa2EndBlk);
+                        }
+
+                        // SA2 1st block spare (writes block num of next SA license block)
+                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                        {
+                            fixedStream.Position = (((sa2Blk + 1) * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                            for (int i = 0; i < 3; i++)
+                                fixedStream.WriteByte(0xFF);
+                        }
+
+                        // SA2 nth block spare (writes block num of n-1 / previous SA data block)
+                        for (int curBlk = 2; curBlk <= sa2NumBlks; curBlk++)
+                        {
+                            var curBlkNum = sa2Blk + curBlk;
+
+                            for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                            {
+                                fixedStream.Position = ((curBlkNum * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                                for (int i = 0; i < 3; i++)
+                                    fixedStream.WriteByte((byte)(curBlkNum - 1));
+                            }
+                        }
+                    }
+                }
+
+                // fix ECC bytes
+                int spareNum = 0;
+                for (int pageNum = pageSkip; pageNum < numPages; pageNum += (pageSkip + 1), spareNum++)
+                {
+                    fixedStream.Position = spareNum * 0x10;
+                    fixedStream.Position += 6;
+                    fixedStream.WriteByte((byte)(blockSpare ? 0 : 0xFF)); // block-spare has 0x00 at 6th byte in spare
+
+                    fixedStream.Position += 1; // 0x8 into spare (ECC area)
+
+                    io.Stream.Position = (pageNum * 0x200);
+                    byte[] pageData = io.Reader.ReadBytes(0x200);
+                    byte[] ecc = iQueBlockSpare.Calculate512Ecc(pageData);
+                    fixedStream.Write(ecc, 0, 8);
+                }
+
+                // null out badblock spares based on badblock entries in the FAT
+                if(MainFsAllocTable != null)
+                {
+                    for(int blockNum = 0; blockNum < NUM_BLOCKS_IN_FAT; blockNum++)
+                    {
+                        if (MainFsAllocTable[blockNum] != BBFS_ALLOC_BADBLOCK)
+                            continue;
+
+                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                        {
+                            fixedStream.Position = ((blockNum * spareEntriesPerBlock) + blockPageNum) * 0x10;
+                            for (int i = 0; i < 0x10; i++)
+                                fixedStream.WriteByte(0);
+                        }
+                    }
+                }
+
+                return fixedStream.ToArray();
+            }
         }
 
         public override string ToString()
