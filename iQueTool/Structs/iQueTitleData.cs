@@ -255,7 +255,7 @@ namespace iQueTool.Structs
 
         public byte[] GetBytes()
         {
-            EndianSwap(); // back to ticket-file endian (BE)
+            EndianSwap(); // back to device endian (BE)
             byte[] bytes = Shared.StructToBytes(this);
             EndianSwap(); // back to native endian (LE)
             return bytes;

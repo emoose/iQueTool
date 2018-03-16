@@ -44,6 +44,14 @@ namespace iQueTool.Structs
             Revocation.EndianSwap();
         }
 
+        public byte[] GetBytes()
+        {
+            EndianSwap(); // back to device endian (BE)
+            byte[] bytes = Shared.StructToBytes(this);
+            EndianSwap(); // back to native endian (LE)
+            return bytes;
+        }
+
         public override string ToString()
         {
             return ToString(false);

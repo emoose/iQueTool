@@ -7,14 +7,14 @@ namespace iQueTool.Structs
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct iQuePrivateData
     {
-        public uint BBID;
-        public uint Timestamp;
+        /* 0x0  */ public uint BBID;
+        /* 0x4  */ public uint Timestamp;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x24)]
-        public char[] BBModel;
+        /* 0x8  */ public char[] BBModel;
 
-        public uint SecureContentId; // SKSA content id
-        public uint CrlVersion;
+        /* 0x2C */ public uint SecureContentId; // SKSA content id
+        /* 0x30 */ public uint CrlVersion;
 
         public string BBModelString
         {
@@ -39,6 +39,14 @@ namespace iQueTool.Structs
 
             SecureContentId = SecureContentId.EndianSwap();
             CrlVersion = CrlVersion.EndianSwap();
+        }
+
+        public byte[] GetBytes()
+        {
+            EndianSwap(); // back to device endian (BE)
+            byte[] bytes = Shared.StructToBytes(this);
+            EndianSwap(); // back to native endian (LE)
+            return bytes;
         }
 
         public override string ToString()
