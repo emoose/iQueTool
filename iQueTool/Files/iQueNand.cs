@@ -9,8 +9,10 @@ namespace iQueTool.Files
     public class iQueNand
     {
         public const int BLOCK_SZ = 0x4000;
+
+        public const int NUM_SK_BLOCKS = 4;
         public const int NUM_FAT_BLOCKS = 0x10;
-        public const int NUM_SYS_AREA_BLOCKS = 0x40;
+        public const int NUM_SYS_AREA_BLOCKS = 0x40; // 0x100000 bytes, but theres some SKSAs that are larger??
         public const int NUM_BLOCKS_IN_FAT = 0x1000;
         public const int NUM_FS_ENTRIES = 0x199;
         public const int FS_HEADER_ADDR = 0x3FF4;
@@ -18,7 +20,10 @@ namespace iQueTool.Files
         public const int MAGIC_BBFS = 0x42424653;
         public const int MAGIC_BBFL = 0x4242464C;
 
-        public const short BBFS_ALLOC_BADBLOCK = -2; // 0xfffe for bad blocks
+        public const short FAT_BLOCK_FREE = 0;
+        public const short FAT_BLOCK_LAST = -1; // 0xffff for last block in chain (this block doesn't point to another)
+        public const short FAT_BLOCK_BAD = -2; // 0xfffe for bad blocks
+        public const short FAT_BLOCK_RESERVED = -3; // 0xfffd for SK/SA (reserved) blocks
 
         private IO io;
         public string FilePath;
@@ -109,10 +114,205 @@ namespace iQueTool.Files
             return chain.ToArray();
         }
 
+        public int GetNextGoodBlock(int blockNum)
+        {
+            for (int i = blockNum + 1; i < NUM_BLOCKS_IN_FAT; i++)
+                if (MainFsAllocTable[i] != FAT_BLOCK_BAD)
+                    return i;
+
+            return -1;
+        }
+
         public byte[] GetSKSAData()
         {
-            io.Stream.Position = 0x0;
-            return io.Reader.ReadBytes(NUM_SYS_AREA_BLOCKS * BLOCK_SZ);
+            using (var ms = new MemoryStream())
+            {
+                var sksa = new IO(ms);
+
+                // read SK data
+                io.Stream.Position = 0;
+                sksa.Writer.Write(io.Reader.ReadBytes(NUM_SK_BLOCKS * BLOCK_SZ));
+
+                int lastDataBlock = 0;
+                int curDataBlock = NUM_SK_BLOCKS;
+
+                // read SA1 ticket area
+                int sa1TicketBlock = curDataBlock;
+                io.Stream.Position = curDataBlock * BLOCK_SZ;
+                byte[] sa1TicketData = io.Reader.ReadBytes(BLOCK_SZ);
+
+                var sa1Ticket = Shared.BytesToStruct<iQueETicket>(sa1TicketData);
+                sa1Ticket.EndianSwap();
+
+                sksa.Writer.Write(sa1TicketData);
+
+                // get next good block after SA1 ticket (which will be SA1 final block)
+                curDataBlock = GetNextGoodBlock(curDataBlock);
+                int sa1FinalDataBlock = curDataBlock;
+
+                int numDataBlocks = (int)(sa1Ticket.ContentSize / BLOCK_SZ);
+                byte[] sa1Data = new byte[sa1Ticket.ContentSize];
+                for (int i = numDataBlocks - 1; i >= 0; i--)
+                {
+                    io.Stream.Position = curDataBlock * BLOCK_SZ;
+                    byte[] curData = io.Reader.ReadBytes(BLOCK_SZ);
+                    Array.Copy(curData, 0, sa1Data, i * BLOCK_SZ, BLOCK_SZ);
+
+                    lastDataBlock = curDataBlock;
+                    curDataBlock = GetNextGoodBlock(curDataBlock);
+                }
+                sksa.Writer.Write(sa1Data);
+
+                // read SA2 ticket area
+                int sa2TicketBlock = curDataBlock;
+                io.Stream.Position = curDataBlock * BLOCK_SZ;
+                byte[] sa2TicketData = io.Reader.ReadBytes(BLOCK_SZ);
+
+                var sa2Ticket = Shared.BytesToStruct<iQueETicket>(sa2TicketData);
+                sa2Ticket.EndianSwap();
+
+                if(sa2Ticket.AuthorityString.StartsWith("Root")) // if SA2 is valid...
+                {
+                    sksa.Writer.Write(sa2TicketData);
+
+                    // get next good block after SA2 ticket (which will be SA2 final block)
+                    curDataBlock = GetNextGoodBlock(curDataBlock);
+                    int sa2FinalDataBlock = curDataBlock;
+
+                    numDataBlocks = (int)(sa2Ticket.ContentSize / BLOCK_SZ);
+                    byte[] sa2Data = new byte[sa2Ticket.ContentSize];
+                    for (int i = numDataBlocks - 1; i >= 0; i--)
+                    {
+                        io.Stream.Position = curDataBlock * BLOCK_SZ;
+                        byte[] curData = io.Reader.ReadBytes(BLOCK_SZ);
+                        Array.Copy(curData, 0, sa2Data, i * BLOCK_SZ, BLOCK_SZ);
+
+                        lastDataBlock = curDataBlock;
+                        curDataBlock = GetNextGoodBlock(curDataBlock);
+                    }
+                    sksa.Writer.Write(sa2Data);
+                }
+
+                return ms.ToArray();
+            }
+        }
+
+        public bool SetSKSAData(string sksaPath)
+        {
+            return SetSKSAData(File.ReadAllBytes(sksaPath));
+        }
+
+        public bool SetSKSAData(byte[] sksaData)
+        { 
+            byte[] spareData = new byte[NUM_SYS_AREA_BLOCKS];
+            for (int i = 0; i < spareData.Length; i++)
+                spareData[i] = 0xFF;
+
+            var sksa = new iQueKernel(sksaData);
+            sksa.Read();
+
+            // write SK data
+            io.Stream.Position = 0;
+            io.Writer.Write(sksa.SKData);
+
+            int lastDataBlock = 0;
+            int curDataBlock = NUM_SK_BLOCKS;
+
+            // write SA1 ticket area
+            int sa1TicketBlock = curDataBlock;
+            io.Stream.Position = curDataBlock * BLOCK_SZ;
+            io.Writer.Write(new byte[BLOCK_SZ]);
+            io.Stream.Position = curDataBlock * BLOCK_SZ;
+            io.Writer.Write(sksa.SA1SigArea.GetBytes());
+
+            // get next good block after SA1 ticket (which will be SA1 final block)
+            curDataBlock = GetNextGoodBlock(curDataBlock);
+            int sa1FinalDataBlock = curDataBlock;
+
+            int numDataBlocks = (int)(sksa.SA1SigArea.Ticket.ContentSize / BLOCK_SZ);
+            for (int i = numDataBlocks - 1; i >= 0; i--)
+            {
+                byte[] data = new byte[BLOCK_SZ];
+                Array.Copy(sksa.SA1Data, i * BLOCK_SZ, data, 0, BLOCK_SZ);
+
+                io.Stream.Position = curDataBlock * BLOCK_SZ;
+                io.Writer.Write(data);
+
+                lastDataBlock = curDataBlock;
+                curDataBlock = GetNextGoodBlock(curDataBlock);
+                if (i > 0)
+                    spareData[curDataBlock] = (byte)lastDataBlock;
+            }
+
+            spareData[sa1TicketBlock] = (byte)lastDataBlock; // set SA1 ticket spare to point to first SA1 block
+
+            if (!sksa.SA2IsValid)
+                spareData[sa1FinalDataBlock] = 0xFF; // set SA1 final block spare to 0xFF if theres no SA following this
+            else
+            {
+                spareData[sa1FinalDataBlock] = (byte)curDataBlock; // set SA1 final block spare to SA2 ticket block
+
+                // write SA2 ticket area
+                int sa2TicketBlock = curDataBlock;
+                io.Stream.Position = curDataBlock * BLOCK_SZ;
+                io.Writer.Write(new byte[BLOCK_SZ]);
+                io.Stream.Position = curDataBlock * BLOCK_SZ;
+                io.Writer.Write(sksa.SA2SigArea.GetBytes());
+
+                // get next good block after SA2 ticket (which will be SA2 final block)
+                curDataBlock = GetNextGoodBlock(curDataBlock);
+                int sa2FinalDataBlock = curDataBlock;
+
+                numDataBlocks = (int)(sksa.SA2SigArea.Ticket.ContentSize / BLOCK_SZ);
+                for (int i = numDataBlocks - 1; i >= 0; i--)
+                {
+                    byte[] data = new byte[BLOCK_SZ];
+                    Array.Copy(sksa.SA2Data, i * BLOCK_SZ, data, 0, BLOCK_SZ);
+
+                    io.Stream.Position = curDataBlock * BLOCK_SZ;
+                    io.Writer.Write(data);
+
+                    lastDataBlock = curDataBlock;
+                    curDataBlock = GetNextGoodBlock(curDataBlock);
+                    if(i > 0)
+                        spareData[curDataBlock] = (byte)lastDataBlock;
+                }
+
+                spareData[sa2TicketBlock] = (byte)lastDataBlock; // set SA2 ticket spare to point to first SA2 block
+                spareData[sa2FinalDataBlock] = 0xff; // set SA2 final block spare to 0xFF
+            }
+
+            // write out our new SKSA spare data
+            // (TODO: fix up GenerateSpareData to work with bad-blocks like the above, so that this wouldn't be needed!)
+
+            using (var spareIO = new IO(FilePath + ".sksa_spare", FileMode.OpenOrCreate))
+            {
+                for (int i = 0; i < spareData.Length; i++)
+                {
+                    if (MainFsAllocTable[i] == FAT_BLOCK_BAD)
+                    {
+                        spareIO.Writer.Write(new byte[0x10]); // bad blocks get no spare data
+                        continue;
+                    }
+                    spareIO.Writer.Write(spareData[i]);
+                    spareIO.Writer.Write(spareData[i]);
+                    spareIO.Writer.Write(spareData[i]);
+                    for (int y = 3; y < 0x10; y++)
+                        spareIO.Writer.Write((byte)0xFF); // seems ique_diag/iqahc always send all FF as the spare (except for the 3 SAArea bytes written above), so this should be fine?
+                }
+            }
+
+            io.Stream.Flush();
+
+            Console.WriteLine("Updated SKSA!");
+            Console.WriteLine("Wrote updated nand to " + FilePath);
+            Console.WriteLine("Wrote SKSA spare-area to " + FilePath + ".sksa_spare");
+
+            // reload this.SKSA
+            SKSA = new iQueKernel(GetSKSAData());
+            SKSA.Read();
+
+            return true;
         }
 
         public byte[] GetInodeData(iQueFsInode inode)
@@ -142,15 +342,14 @@ namespace iQueTool.Files
             var numBlocks = (int)(io.Stream.Length / BLOCK_SZ);
 
             if(numBlocks != NUM_BLOCKS_IN_FAT)
-                return false; // invalid image, maybe the NAND you downloaded needs to be trimmed from 0x3FFC0000 to 0x7FFC0000, for a perfect 0x40000000 byte image?
-
-            io.Stream.Position = 0;
-            SKSA = new iQueKernel(io);
-            SKSA.Read();
+                return false; // invalid image
 
             var ret = ReadFilesystem();
             if (!ret)
                 return false; // failed to find valid FAT
+
+            SKSA = new iQueKernel(GetSKSAData());
+            SKSA.Read();
 
             int idx = GetInodeIdx("cert.sys");
             if (idx >= 0)
@@ -397,7 +596,7 @@ namespace iQueTool.Files
                 {
                     for(int blockNum = 0; blockNum < NUM_BLOCKS_IN_FAT; blockNum++)
                     {
-                        if (MainFsAllocTable[blockNum] != BBFS_ALLOC_BADBLOCK)
+                        if (MainFsAllocTable[blockNum] != FAT_BLOCK_BAD)
                             continue;
 
                         for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)

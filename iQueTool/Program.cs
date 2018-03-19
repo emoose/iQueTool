@@ -30,6 +30,8 @@ namespace iQueTool
 
         static bool showAllFsInfo = false;
 
+        static string updateKernelPath = String.Empty;
+
         static string generateSparePath = String.Empty;
         static bool generateFullSpare = false;
 
@@ -59,6 +61,8 @@ namespace iQueTool
                 { "xk|extractkernel", v => extractKernel = v != null },
                 { "fs|showallfs", v => showAllFsInfo = v != null },
 
+                { "uk|updatekernel=", v => updateKernelPath = v },
+
                 { "gs|genspare=", v => generateSparePath = v },
                 { "gp|fullspare", v => generateFullSpare = v != null },
 
@@ -70,7 +74,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.2a: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.3: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -105,6 +109,10 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes");
                 Console.WriteLine(fmt + "-xk (-extractkernel) - extract secure-kernel from NAND");
                 Console.WriteLine(fmt + "-fs (-showallfs) - shows info about all found FS blocks");
+                Console.WriteLine();
+                Console.WriteLine(fmt + "-uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA");
+                Console.WriteLine(fmt + fmt + "also takes bad-blocks into account and will work around them");
+                Console.WriteLine(fmt + fmt + "will generate a <nand-path>.sksa_spare file with the correct SKSA spare data");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND");
                 Console.WriteLine(fmt + "-gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead");
@@ -299,6 +307,12 @@ namespace iQueTool
                 File.WriteAllBytes(outputFile, nandFile.GetSKSAData());
 
                 Console.WriteLine($"Extracted SKSA to {outputFile}");
+            }
+
+            if(!string.IsNullOrEmpty(updateKernelPath))
+            {
+                Console.WriteLine($"Updating NAND SKSA to {updateKernelPath}");
+                nandFile.SetSKSAData(updateKernelPath);
             }
 
             if(!string.IsNullOrEmpty(generateSparePath))

@@ -77,6 +77,19 @@ namespace iQueTool.Structs
             }
         }
 
+        public byte[] TicketHash
+        {
+            get
+            {
+                byte[] data = GetBytes();
+                Array.Resize(ref data, 0xAC);
+
+                var sha1 = new SHA1Managed();
+                byte[] hash = sha1.ComputeHash(data);
+                return hash;
+            }
+        }
+
         public bool IsSignatureValid
         {
             get
@@ -105,7 +118,7 @@ namespace iQueTool.Structs
             }
         }
 
-        public bool FakeSign(out byte[] fakeSignedTicket)
+        public bool FakeSign(out byte[] fakeSignedTicket, bool alternateMethod = false)
         {
             // fake/trucha sign the ticket
             byte[] data = GetBytes();
@@ -117,10 +130,19 @@ namespace iQueTool.Structs
             bool success = hash[0] == 0;
             if (!success) // have to change a part of the ticket so that first byte of hash is 0
             {
-                for (ulong i = 0; i < ulong.MaxValue; i++)
+                for (ulong i = 0; i < (alternateMethod ? uint.MaxValue : ulong.MaxValue); i++)
                 {
-                    byte[] i_bytes = BitConverter.GetBytes(i);
-                    Array.Copy(i_bytes, 0, data, 0x90, 8); // change last 8 chars of the Authority field (assuming that iQue will only use the parts of the Authority field up to the first null..)
+                    if (alternateMethod)
+                    {
+                        byte[] i_bytes = BitConverter.GetBytes((uint)i);
+                        Array.Copy(i_bytes, 0, data, 0x54, 4); // change Unk2854 field
+                    }
+                    else
+                    { 
+                        byte[] i_bytes = BitConverter.GetBytes(i);
+                        Array.Copy(i_bytes, 0, data, 0x90, 8); // change last 8 chars of the Authority field (assuming that iQue will only use the parts of the Authority field up to the first null..)
+                    }
+
                     hash = sha1.ComputeHash(data);
                     if (hash[0] == 0)
                     {
