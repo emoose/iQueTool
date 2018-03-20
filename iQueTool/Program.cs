@@ -244,6 +244,16 @@ namespace iQueTool
             Console.WriteLine($"Opening NAND image from {filePath}...");
             Console.WriteLine();
 
+            if(!string.IsNullOrEmpty(outputFile) && !string.IsNullOrEmpty(updateKernelPath))
+            {
+                // we're updating kernel with output file specified, so copy the input file to specified output file and work with that instead
+                if (File.Exists(outputFile))
+                    File.Delete(outputFile);
+
+                File.Copy(filePath, outputFile);
+                filePath = outputFile;
+            }
+
             var nandFile = new iQueNand(filePath) {
                 SkipVerifyFsChecksums = skipVerifyChecksums,
                 InodesOffset = isBadDump ? 0x10 : 0
@@ -264,55 +274,58 @@ namespace iQueTool
                 Console.WriteLine($"Wrote detailed NAND info to {filePath}.txt");
             }
 
-            if(extractAll)
-            {
-                if (string.IsNullOrEmpty(outputFile))
-                {
-                    outputFile = filePath + "_ext";
-                    Console.WriteLine("[!] No output path (-o) given, set path to:");
-                    Console.WriteLine($"- {outputFile}");
-                    Console.WriteLine();
-                }
-
-                if (!Directory.Exists(outputFile))
-                    Directory.CreateDirectory(outputFile);
-
-                int count = 0;
-                foreach (var file in nandFile.MainFsInodes)
-                {
-                    if (!file.IsValid)
-                        continue;
-
-                    var extPath = Path.Combine(outputFile, file.NameString);
-                    Console.WriteLine($"Writing file to {extPath}");
-                    File.WriteAllBytes(extPath, nandFile.GetInodeData(file));
-                    count++;
-                }
-
-                Console.WriteLine($"Extracted {count} files to {outputFile}");
-            }
-
-            if(extractKernel)
-            {
-                if (string.IsNullOrEmpty(outputFile))
-                {
-                    outputFile = filePath + ".sksa.bin";
-                    Console.WriteLine("[!] No output path (-o) given, set path to:");
-                    Console.WriteLine($"- {outputFile}");
-                    Console.WriteLine();
-                }
-                if (extractAll) // if we just extracted the fs files we'll extract SKSA into the same folder
-                    outputFile = Path.Combine(outputFile, "sksa.bin");
-
-                File.WriteAllBytes(outputFile, nandFile.GetSKSAData());
-
-                Console.WriteLine($"Extracted SKSA to {outputFile}");
-            }
-
             if(!string.IsNullOrEmpty(updateKernelPath))
             {
                 Console.WriteLine($"Updating NAND SKSA to {updateKernelPath}");
                 nandFile.SetSKSAData(updateKernelPath);
+            }
+            else
+            {
+                // extract / extractkernel can only be used if we aren't updating kernel in the same session
+                if (extractAll)
+                {
+                    if (string.IsNullOrEmpty(outputFile))
+                    {
+                        outputFile = filePath + "_ext";
+                        Console.WriteLine("[!] No output path (-o) given, set path to:");
+                        Console.WriteLine($"- {outputFile}");
+                        Console.WriteLine();
+                    }
+
+                    if (!Directory.Exists(outputFile))
+                        Directory.CreateDirectory(outputFile);
+
+                    int count = 0;
+                    foreach (var file in nandFile.MainFsInodes)
+                    {
+                        if (!file.IsValid)
+                            continue;
+
+                        var extPath = Path.Combine(outputFile, file.NameString);
+                        Console.WriteLine($"Writing file to {extPath}");
+                        File.WriteAllBytes(extPath, nandFile.GetInodeData(file));
+                        count++;
+                    }
+
+                    Console.WriteLine($"Extracted {count} files to {outputFile}");
+                }
+
+                if (extractKernel)
+                {
+                    if (string.IsNullOrEmpty(outputFile))
+                    {
+                        outputFile = filePath + ".sksa.bin";
+                        Console.WriteLine("[!] No output path (-o) given, set path to:");
+                        Console.WriteLine($"- {outputFile}");
+                        Console.WriteLine();
+                    }
+                    if (extractAll) // if we just extracted the fs files we'll extract SKSA into the same folder
+                        outputFile = Path.Combine(outputFile, "sksa.bin");
+
+                    File.WriteAllBytes(outputFile, nandFile.GetSKSAData());
+
+                    Console.WriteLine($"Extracted SKSA to {outputFile}");
+                }
             }
 
             if(!string.IsNullOrEmpty(generateSparePath))
