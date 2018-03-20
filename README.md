@@ -34,7 +34,7 @@ Mode "nand":
 
    -uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA
       also takes bad-blocks into account and will work around them
-      will generate a <nand-path>.sksa_spare file with the correct SKSA spare data
+      use -gs afterwards to generate a new spare with proper SAData fields
 
    -gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND
    -gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead

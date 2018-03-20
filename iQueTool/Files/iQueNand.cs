@@ -13,6 +13,8 @@ namespace iQueTool.Files
         public const int NUM_SK_BLOCKS = 4;
         public const int NUM_FAT_BLOCKS = 0x10;
         public const int NUM_SYS_AREA_BLOCKS = 0x40; // 0x100000 bytes, but theres some SKSAs that are larger??
+        public const int NUM_SYS_AREA_BLOCKS_DEV = 0x100; // largest SKSA is 0xE9 blocks, so I guess dev units probably had 0x100 for SKSA area
+
         public const int NUM_BLOCKS_IN_FAT = 0x1000;
         public const int NUM_FS_ENTRIES = 0x199;
         public const int FS_HEADER_ADDR = 0x3FF4;
@@ -203,11 +205,7 @@ namespace iQueTool.Files
         }
 
         public bool SetSKSAData(byte[] sksaData)
-        { 
-            byte[] spareData = new byte[NUM_SYS_AREA_BLOCKS];
-            for (int i = 0; i < spareData.Length; i++)
-                spareData[i] = 0xFF;
-
+        {
             var sksa = new iQueKernel(sksaData);
             sksa.Read();
 
@@ -215,7 +213,7 @@ namespace iQueTool.Files
             io.Stream.Position = 0;
             io.Writer.Write(sksa.SKData);
 
-            int lastDataBlock = 0;
+            int lastDataBlock = -1;
             int curDataBlock = NUM_SK_BLOCKS;
 
             // write SA1 ticket area
@@ -240,18 +238,10 @@ namespace iQueTool.Files
 
                 lastDataBlock = curDataBlock;
                 curDataBlock = GetNextGoodBlock(curDataBlock);
-                if (i > 0)
-                    spareData[curDataBlock] = (byte)lastDataBlock;
             }
 
-            spareData[sa1TicketBlock] = (byte)lastDataBlock; // set SA1 ticket spare to point to first SA1 block
-
-            if (!sksa.SA2IsValid)
-                spareData[sa1FinalDataBlock] = 0xFF; // set SA1 final block spare to 0xFF if theres no SA following this
-            else
+            if (sksa.SA2IsValid)
             {
-                spareData[sa1FinalDataBlock] = (byte)curDataBlock; // set SA1 final block spare to SA2 ticket block
-
                 // write SA2 ticket area
                 int sa2TicketBlock = curDataBlock;
                 io.Stream.Position = curDataBlock * BLOCK_SZ;
@@ -274,31 +264,6 @@ namespace iQueTool.Files
 
                     lastDataBlock = curDataBlock;
                     curDataBlock = GetNextGoodBlock(curDataBlock);
-                    if(i > 0)
-                        spareData[curDataBlock] = (byte)lastDataBlock;
-                }
-
-                spareData[sa2TicketBlock] = (byte)lastDataBlock; // set SA2 ticket spare to point to first SA2 block
-                spareData[sa2FinalDataBlock] = 0xff; // set SA2 final block spare to 0xFF
-            }
-
-            // write out our new SKSA spare data
-            // (TODO: fix up GenerateSpareData to work with bad-blocks like the above, so that this wouldn't be needed!)
-
-            using (var spareIO = new IO(FilePath + ".sksa_spare", FileMode.OpenOrCreate))
-            {
-                for (int i = 0; i < spareData.Length; i++)
-                {
-                    if (MainFsAllocTable[i] == FAT_BLOCK_BAD)
-                    {
-                        spareIO.Writer.Write(new byte[0x10]); // bad blocks get no spare data
-                        continue;
-                    }
-                    spareIO.Writer.Write(spareData[i]);
-                    spareIO.Writer.Write(spareData[i]);
-                    spareIO.Writer.Write(spareData[i]);
-                    for (int y = 3; y < 0x10; y++)
-                        spareIO.Writer.Write((byte)0xFF); // seems ique_diag/iqahc always send all FF as the spare (except for the 3 SAArea bytes written above), so this should be fine?
                 }
             }
 
@@ -306,7 +271,6 @@ namespace iQueTool.Files
 
             Console.WriteLine("Updated SKSA!");
             Console.WriteLine("Wrote updated nand to " + FilePath);
-            Console.WriteLine("Wrote SKSA spare-area to " + FilePath + ".sksa_spare");
 
             // reload this.SKSA
             SKSA = new iQueKernel(GetSKSAData());
@@ -503,74 +467,120 @@ namespace iQueTool.Files
                         fixedStream.WriteByte(0xFF);
                 }
 
-                // fix SA-area spare bytes
+                // fix SA-area spare bytes (first 3 bytes of spare, only set for SA1/SA2 blocks)
                 {
-                    var sa1Blk = (byte)(SKSA.SA1Addr / 0x4000);
-                    var sa1NumBlks = SKSA.SA1SigArea.Ticket.ContentSize / 0x4000;
-
-                    var sa2Blk = (byte)(SKSA.SA2IsValid ? SKSA.SA2Addr / 0x4000 : -1);
-
-                    // SA1 license spare (writes SA1 end block num)
-                    for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                    // write 0xFF as SAData for the SK
+                    fixedStream.Position = 0;
+                    for(int blockNum = 0; blockNum < NUM_SK_BLOCKS; blockNum++)
                     {
-                        fixedStream.Position = ((sa1Blk * spareEntriesPerBlock) + blockPageNum) * 0x10;
-                        var sa1EndBlk = (byte)(sa1Blk + sa1NumBlks);
-                        for (int i = 0; i < 3; i++)
-                            fixedStream.WriteByte(sa1EndBlk);
-                    }
-
-                    // SA1 1st block spare (writes block num of next SA license block)
-                    for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
-                    {
-                        fixedStream.Position = (((sa1Blk + 1) * spareEntriesPerBlock) + blockPageNum) * 0x10;
-                        for (int i = 0; i < 3; i++)
-                            fixedStream.WriteByte(sa2Blk);
-                    }
-
-                    // SA1 nth block spare (writes block num of n-1 / previous SA data block)
-                    for (int curBlk = 2; curBlk <= sa1NumBlks; curBlk++)
-                    {
-                        var curBlkNum = sa1Blk + curBlk;
-                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                        for(int page = 0; page < spareEntriesPerBlock; page++)
                         {
-                            fixedStream.Position = ((curBlkNum * spareEntriesPerBlock) + blockPageNum) * 0x10;
-                            for (int i = 0; i < 3; i++)
-                                fixedStream.WriteByte((byte)(curBlkNum - 1));
+                            fixedStream.WriteByte(0xFF);
+                            fixedStream.WriteByte(0xFF);
+                            fixedStream.WriteByte(0xFF);
+                            fixedStream.Position += (0x10 - 3);
                         }
                     }
 
-                    if (sa2Blk != 0xFF)
+                    int lastDataBlock = -1;
+                    int curDataBlock = NUM_SK_BLOCKS;
+
+                    int sa1TicketBlock = curDataBlock;
+
+                    // get next good block after SA1 ticket (which will be SA1 final block)
+                    curDataBlock = GetNextGoodBlock(curDataBlock);
+                    int sa1FinalDataBlock = curDataBlock;
+
+                    // loop through SA1 in reverse and write SA data block SAData fields
+                    int numDataBlocks = (int)(SKSA.SA1SigArea.Ticket.ContentSize / BLOCK_SZ);
+                    for (int i = numDataBlocks - 1; i >= 0; i--)
                     {
-                        var sa2NumBlks = SKSA.SA2SigArea.Ticket.ContentSize / 0x4000;
-
-                        // SA2 license spare (writes SA2 end block num)
-                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                        lastDataBlock = curDataBlock;
+                        curDataBlock = GetNextGoodBlock(curDataBlock);
+                        if (i > 0)
                         {
-                            fixedStream.Position = ((sa2Blk * spareEntriesPerBlock) + blockPageNum) * 0x10;
-                            var sa2EndBlk = (byte)(sa2Blk + sa2NumBlks);
-                            for (int i = 0; i < 3; i++)
-                                fixedStream.WriteByte(sa2EndBlk);
-                        }
-
-                        // SA2 1st block spare (writes block num of next SA license block)
-                        for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
-                        {
-                            fixedStream.Position = (((sa2Blk + 1) * spareEntriesPerBlock) + blockPageNum) * 0x10;
-                            for (int i = 0; i < 3; i++)
-                                fixedStream.WriteByte(0xFF);
-                        }
-
-                        // SA2 nth block spare (writes block num of n-1 / previous SA data block)
-                        for (int curBlk = 2; curBlk <= sa2NumBlks; curBlk++)
-                        {
-                            var curBlkNum = sa2Blk + curBlk;
-
-                            for (int blockPageNum = 0; blockPageNum < spareEntriesPerBlock; blockPageNum++)
+                            fixedStream.Position = (curDataBlock * spareEntriesPerBlock) * 0x10;
+                            for (int page = 0; page < spareEntriesPerBlock; page++)
                             {
-                                fixedStream.Position = ((curBlkNum * spareEntriesPerBlock) + blockPageNum) * 0x10;
-                                for (int i = 0; i < 3; i++)
-                                    fixedStream.WriteByte((byte)(curBlkNum - 1));
+                                fixedStream.WriteByte((byte)lastDataBlock);
+                                fixedStream.WriteByte((byte)lastDataBlock);
+                                fixedStream.WriteByte((byte)lastDataBlock);
+                                fixedStream.Position += (0x10 - 3);
                             }
+                        }
+                    }
+
+                    // write SA1 ticket block SAData
+                    fixedStream.Position = (sa1TicketBlock * spareEntriesPerBlock) * 0x10;
+                    for (int page = 0; page < spareEntriesPerBlock; page++)
+                    {
+                        fixedStream.WriteByte((byte)lastDataBlock);
+                        fixedStream.WriteByte((byte)lastDataBlock);
+                        fixedStream.WriteByte((byte)lastDataBlock);
+                        fixedStream.Position += (0x10 - 3);
+                    }
+
+                    // write SA1 final data block SAData (points to SA2 ticket block, or 0xFF)
+                    byte sa1FinalSAData = 0xFF;
+                    if (SKSA.SA2IsValid)
+                        sa1FinalSAData = (byte)curDataBlock;
+
+                    fixedStream.Position = (sa1FinalDataBlock * spareEntriesPerBlock) * 0x10;
+                    for (int page = 0; page < spareEntriesPerBlock; page++)
+                    {
+                        fixedStream.WriteByte((byte)sa1FinalSAData);
+                        fixedStream.WriteByte((byte)sa1FinalSAData);
+                        fixedStream.WriteByte((byte)sa1FinalSAData);
+                        fixedStream.Position += (0x10 - 3);
+                    }
+
+                    // if we have SA2, fix up the SAData for that too
+                    if(SKSA.SA2IsValid)
+                    { 
+                        // write SA2 ticket area
+                        int sa2TicketBlock = curDataBlock;
+
+                        // get next good block after SA2 ticket (which will be SA2 final block)
+                        curDataBlock = GetNextGoodBlock(curDataBlock);
+                        int sa2FinalDataBlock = curDataBlock;
+
+                        // loop through SA2 in reverse and write SA2 data block SAData fields
+                        numDataBlocks = (int)(SKSA.SA2SigArea.Ticket.ContentSize / BLOCK_SZ);
+                        for (int i = numDataBlocks - 1; i >= 0; i--)
+                        {
+                            lastDataBlock = curDataBlock;
+                            curDataBlock = GetNextGoodBlock(curDataBlock);
+                            if (i > 0)
+                            {
+                                fixedStream.Position = (curDataBlock * spareEntriesPerBlock) * 0x10;
+                                for (int page = 0; page < spareEntriesPerBlock; page++)
+                                {
+                                    fixedStream.WriteByte((byte)lastDataBlock);
+                                    fixedStream.WriteByte((byte)lastDataBlock);
+                                    fixedStream.WriteByte((byte)lastDataBlock);
+                                    fixedStream.Position += (0x10 - 3);
+                                }
+                            }
+                        }
+
+                        // write SA2 ticket block SAData (points to first SA2 data block)
+                        fixedStream.Position = (sa2TicketBlock * spareEntriesPerBlock) * 0x10;
+                        for (int page = 0; page < spareEntriesPerBlock; page++)
+                        {
+                            fixedStream.WriteByte((byte)lastDataBlock);
+                            fixedStream.WriteByte((byte)lastDataBlock);
+                            fixedStream.WriteByte((byte)lastDataBlock);
+                            fixedStream.Position += (0x10 - 3);
+                        }
+
+                        // write SA2 final data block SAData (0xFF)
+                        fixedStream.Position = (sa2FinalDataBlock * spareEntriesPerBlock) * 0x10;
+                        for (int page = 0; page < spareEntriesPerBlock; page++)
+                        {
+                            fixedStream.WriteByte((byte)0xFF);
+                            fixedStream.WriteByte((byte)0xFF);
+                            fixedStream.WriteByte((byte)0xFF);
+                            fixedStream.Position += (0x10 - 3);
                         }
                     }
                 }

@@ -112,7 +112,7 @@ namespace iQueTool
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA");
                 Console.WriteLine(fmt + fmt + "also takes bad-blocks into account and will work around them");
-                Console.WriteLine(fmt + fmt + "will generate a <nand-path>.sksa_spare file with the correct SKSA spare data");
+                Console.WriteLine(fmt + fmt + "use -gs afterwards to generate a new spare with proper SAData fields");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND");
                 Console.WriteLine(fmt + "-gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead");
