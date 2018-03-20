@@ -31,6 +31,14 @@ namespace iQueTool.Structs
 
         public iQueCertificateRevocation Revocation;
 
+        public bool IsValid
+        {
+            get
+            {
+                return AuthorityAddr == 0x53C; // AuthorityAddr seems to always be 0x53C
+            }
+        }
+
         public void EndianSwap()
         {
             Ticket.EndianSwap();

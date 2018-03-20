@@ -11,6 +11,7 @@ namespace iQueTool.Files
         public const int SIGAREA_ADDR = 0x10000;
         public const int SIGAREA_END_ADDR = 0x14000;
         public const int SIGAREA_SZ = 0x4000;
+        public const int SIGAREA_SZ_RAW = 0xBB8;
 
         private long startAddr;
         private IO io;
@@ -30,7 +31,7 @@ namespace iQueTool.Files
         {
             get
             {
-                return SA2Addr > -1 && SA2SigArea.AuthorityAddr == 0x53C; // AuthorityAddr seems to always be 0x53C
+                return SA2Addr > -1 && SA2SigArea.Ticket.ContentSize > 0 && SA2SigArea.IsValid; 
             }
         }
 
@@ -56,7 +57,7 @@ namespace iQueTool.Files
             SKData = io.Reader.ReadBytes(SK_NUM_BLOCKS * 0x4000);
 
             SA1Addr = startAddr + SIGAREA_ADDR;
-            if (SA1Addr + SIGAREA_SZ >= io.Stream.Length)
+            if (SA1Addr + SIGAREA_SZ_RAW >= io.Stream.Length)
             {
                 SA1Addr = -1;
                 return false;
@@ -67,16 +68,19 @@ namespace iQueTool.Files
             SA1SigArea = io.Reader.ReadStruct<iQueSysAppSigArea>();
             SA1SigArea.EndianSwap();
 
+            if (SA1SigArea.Ticket.ContentSize == 0 || !SA1SigArea.IsValid)
+                return true; // SA1 has no data
+
             // read SA1 data
             io.Stream.Position = SA1Addr + SIGAREA_SZ;
             SA1Data = io.Reader.ReadBytes((int)SA1SigArea.Ticket.ContentSize);
 
             // check if there might be a valid SA2 area
             SA2Addr = SA1Addr + SIGAREA_SZ + SA1SigArea.Ticket.ContentSize;
-            if(SA1SigArea.Ticket.ContentSize == 0 || SA2Addr + SIGAREA_SZ >= io.Stream.Length)
+            if(SA2Addr + SIGAREA_SZ_RAW >= io.Stream.Length)
             {
                 SA2Addr = -1;
-                return true; // we read SA1 fine so return true
+                return true; // we read the SA1 fine so return true
             }
             
             // read SA2 ticket
