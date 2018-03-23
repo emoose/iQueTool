@@ -40,6 +40,7 @@ Mode "nand":
    -gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead
 
    -sc (-skipchecksums) - skip verifying FS checksums
+   -fc (-fixchecksums) - skips verifying & repairs all FS checksums
    -bd (-baddump) - will try reading inodes with a 0x10 byte offset
 
 Mode "sparefix":

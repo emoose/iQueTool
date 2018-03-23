@@ -26,6 +26,7 @@ namespace iQueTool
         static bool writeNewTicketFile = false;
 
         static bool skipVerifyChecksums = false;
+        static bool fixFsChecksums = false;
         static bool isBadDump = false;
 
         static bool showAllFsInfo = false;
@@ -67,6 +68,7 @@ namespace iQueTool
                 { "gp|fullspare", v => generateFullSpare = v != null },
 
                 { "sc|skipchecksums", v => skipVerifyChecksums = v != null },
+                { "fc|fixchecksums", v => fixFsChecksums = v != null },
                 { "bd|baddump", v => isBadDump = v != null },
 
                 { "n|newfile", v => writeNewTicketFile = v != null }
@@ -117,6 +119,7 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND");
                 Console.WriteLine(fmt + "-gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead");
                 Console.WriteLine();
+                Console.WriteLine(fmt + "-fc (-fixchecksums) - skips verifying & repairs all FS checksums");
                 Console.WriteLine(fmt + "-sc (-skipchecksums) - skip verifying FS checksums");
                 Console.WriteLine(fmt + "-bd (-baddump) - will try reading inodes with a 0x10 byte offset");
                 Console.WriteLine();
@@ -255,7 +258,7 @@ namespace iQueTool
             }
 
             var nandFile = new iQueNand(filePath) {
-                SkipVerifyFsChecksums = skipVerifyChecksums,
+                SkipVerifyFsChecksums = skipVerifyChecksums || fixFsChecksums,
                 InodesOffset = isBadDump ? 0x10 : 0
             };
 
@@ -264,6 +267,9 @@ namespace iQueTool
                 Console.WriteLine($"[!] Failed to read NAND image!");
                 return;
             }
+
+            if (fixFsChecksums)
+                nandFile.RepairFsChecksums();
 
             if(printInfo)
                 Console.WriteLine(nandFile.ToString(true, true, showAllFsInfo));

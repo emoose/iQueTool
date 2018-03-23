@@ -279,6 +279,23 @@ namespace iQueTool.Files
             return true;
         }
 
+        public byte[] GetChainData(short[] chain)
+        {
+            var data = new byte[chain.Length * 0x4000];
+
+            for (int i = 0; i < chain.Length; i++)
+            {
+                io.Stream.Position = chain[i] * BLOCK_SZ;
+
+                int numRead = BLOCK_SZ;
+
+                var blockData = io.Reader.ReadBytes(numRead);
+                Array.Copy(blockData, 0, data, i * BLOCK_SZ, numRead);
+            }
+
+            return data;
+        }
+
         public byte[] GetInodeData(iQueFsInode inode)
         {
             var data = new byte[inode.Size];
@@ -423,6 +440,25 @@ namespace iQueTool.Files
             }
 
             return latestSeqNo >= 0;
+        }
+
+        public void RepairFsChecksum(int fatBlockIdx)
+        {
+            io.Stream.Position = fatBlockIdx * BLOCK_SZ;
+
+            ushort sum = 0;
+            for (int i = 0; i < 0x1FFF; i++)
+                sum += io.Reader.ReadUInt16().EndianSwap();
+
+            ushort res = (ushort)(0xCAD7 - sum);
+            io.Stream.Position = (fatBlockIdx * BLOCK_SZ) + 0x3FFE;
+            io.Writer.Write(res.EndianSwap()); // todo: reload FS / change FsHeaders[x].CheckSum
+        }
+
+        public void RepairFsChecksums()
+        {
+            foreach (var block in FsBlocks)
+                RepairFsChecksum(block);
         }
 
         public bool VerifyFsChecksum(iQueFsHeader fatHeader, int fatBlockIdx)
