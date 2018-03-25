@@ -17,12 +17,12 @@ namespace iQueTool.Structs
         /* 0x10   */ public uint SramFlags;
         /* 0x14   */ public uint SramSize;
 
-        /* 0x18   */ public uint Unk18; // always 0? sometimes 0x807C0000 / 0x807C4000, maybe Unk18/Unk1C are another save medium?
-        /* 0x1C   */ public uint Unk1C; // always 0?
+        /* 0x18   */ public uint Controller1Flags; // controller 1 addon flags? (rumble / controller pak / ???)
+        /* 0x1C   */ public uint Controller2Flags; // controller 2 addon flags? (rumble / controller pak / ???)
+        /* 0x20   */ public uint Controller3Flags; // controller 3 addon flags? (rumble / controller pak / ???)
+        /* 0x24   */ public uint Controller4Flags; // controller 4 addon flags? (rumble / controller pak / ???)
+        /* 0x28   */ public uint ControllerPakSize; // saves to a .u0* file if NumU0XFiles > 0?
 
-        /* 0x20   */ public uint Unk20; // always 0?
-        /* 0x24   */ public uint Unk24; // always 0?
-        /* 0x28   */ public uint Unk28; // always 0?
         /* 0x2C   */ public uint Unk2C; // always 0xB0000000?
 
         /* 0x30   */ public uint Unk30; // always 1?
@@ -32,7 +32,7 @@ namespace iQueTool.Structs
         
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x3)]
         /* 0x40   */ public byte[] Unk40; // "CAM" for every ticket I've seen 
-        /* 0x43   */ public byte NumU0XFiles; // unsure if this field is ever used, .u0x seems related to .sta files?
+        /* 0x43   */ public byte NumU0XFiles; // .u01 / .u02? seems to be used in Animal Crossing, maybe RTC related?
 
         /* 0x44   */ public ushort ThumbImgLength; // can't be more than 0x4000, decompressed length must be exactly 0x1880 bytes!
         /* 0x46   */ public ushort TitleImgLength; // can't be more than 0x10000 (how exactly would that even fit?)
@@ -68,7 +68,7 @@ namespace iQueTool.Structs
         /* 0x29CC */ public byte[] Unk29CC;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
-        /* 0x2A0C */ public char[] CertName; // always an XS cert (???), maybe CP is used to sign the content header (0 - 0x2858), and XS is to sign 0x29AC - 0x2A0C?
+        /* 0x2A0C */ public char[] Authority; // always an XS (exchange server) cert?
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x100)]
         /* 0x2A4C */ public byte[] Signature; // signature? doesn't seem to verify no matter what I try...
@@ -201,11 +201,11 @@ namespace iQueTool.Structs
             }
         }
 
-        public string CertNameString
+        public string AuthorityString
         {
             get
             {
-                return CertName == null ? String.Empty : new string(CertName).Replace("\0", "").Replace("\r", "").Replace("\n", "");
+                return Authority == null ? String.Empty : new string(Authority).Replace("\0", "").Replace("\r", "").Replace("\n", "");
             }
         }
 
@@ -227,12 +227,12 @@ namespace iQueTool.Structs
             SramFlags = SramFlags.EndianSwap();
             SramSize = SramSize.EndianSwap();
 
-            Unk18 = Unk18.EndianSwap();
-            Unk1C = Unk1C.EndianSwap();
+            Controller1Flags = Controller1Flags.EndianSwap();
+            Controller2Flags = Controller2Flags.EndianSwap();
+            Controller3Flags = Controller3Flags.EndianSwap();
+            Controller4Flags = Controller4Flags.EndianSwap();
+            ControllerPakSize = ControllerPakSize.EndianSwap();
 
-            Unk20 = Unk20.EndianSwap();
-            Unk24 = Unk24.EndianSwap();
-            Unk28 = Unk28.EndianSwap();
             Unk2C = Unk2C.EndianSwap();
 
             Unk30 = Unk30.EndianSwap();
@@ -275,17 +275,6 @@ namespace iQueTool.Structs
             string fmt = formatted ? "    " : "";
 
             // some stuff to alert me of unks that are different
-            if (Unk18 != 0)
-                b.AppendLineSpace(fmt + "Unk18 != 0!");
-            if (Unk1C != 0)
-                b.AppendLineSpace(fmt + "Unk1C != 0!");
-
-            if (Unk20 != 0)
-                b.AppendLineSpace(fmt + "Unk20 != 0!");
-            if (Unk24 != 0)
-                b.AppendLineSpace(fmt + "Unk24 != 0!");
-            if (Unk28 != 0)
-                b.AppendLineSpace(fmt + "Unk28 != 0!");
             if (Unk2C != 0xB0000000)
                 b.AppendLineSpace(fmt + "Unk2C != 0xB0000000!");
 
@@ -324,6 +313,13 @@ namespace iQueTool.Structs
             b.AppendLineSpace(fmt + $"SramSize: {SramSize} bytes (flags: 0x{SramFlags:X8})");
 
             b.AppendLine();
+            b.AppendLineSpace(fmt + $"Controller1Flags: 0x{Controller1Flags:X}");
+            b.AppendLineSpace(fmt + $"Controller2Flags: 0x{Controller2Flags:X}");
+            b.AppendLineSpace(fmt + $"Controller3Flags: 0x{Controller3Flags:X}");
+            b.AppendLineSpace(fmt + $"Controller4Flags: 0x{Controller4Flags:X}");
+            b.AppendLineSpace(fmt + $"ControllerPakSize: 0x{ControllerPakSize:X}");
+
+            b.AppendLine();
             b.AppendLineSpace(fmt + $"NumU0XFiles: 0x{NumU0XFiles:X}");
             b.AppendLineSpace(fmt + $"ThumbImgLength: {ThumbImgLength}");
             b.AppendLineSpace(fmt + $"TitleImgLength: {TitleImgLength}");
@@ -346,23 +342,14 @@ namespace iQueTool.Structs
             b.AppendLineSpace(fmt + $"TimeLimitMinutes: {TimeLimitMinutes}");
 
             b.AppendLine();
-            b.AppendLineSpace(fmt + $"CertName: {CertNameString}");
+            b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
 
             b.AppendLine();
-            b.AppendLineSpace(fmt + "Signature?:" + Environment.NewLine + fmt + Signature.ToHexString());
+            b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
 
             b.AppendLine();
-            
-            b.AppendLineSpace(fmt + $"Unk18: 0x{Unk18:X}");
-            b.AppendLineSpace(fmt + $"Unk1C: 0x{Unk1C:X}");
 
-            b.AppendLine();
-            b.AppendLineSpace(fmt + $"Unk20: 0x{Unk20:X}");
-            b.AppendLineSpace(fmt + $"Unk24: 0x{Unk24:X}");
-            b.AppendLineSpace(fmt + $"Unk28: 0x{Unk28:X}");
             b.AppendLineSpace(fmt + $"Unk2C: 0x{Unk2C:X}");
-
-            b.AppendLine();
             b.AppendLineSpace(fmt + $"Unk30: 0x{Unk30:X}");
             b.AppendLineSpace(fmt + $"Unk34: 0x{Unk34:X}");
             b.AppendLineSpace(fmt + $"Unk38: 0x{Unk38:X}");
