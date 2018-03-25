@@ -668,7 +668,7 @@ namespace iQueTool.Files
             var b = new StringBuilder();
             b.AppendLine("iQueNand:");
 
-            b.AppendLine($"MainFs (@ 0x{(MainFsBlock * BLOCK_SZ):X}):");
+            b.AppendLine($"MainFs (0x{(MainFsBlock * BLOCK_SZ):X} / block {MainFsBlock}):");
             b.AppendLine($"  SeqNo: {MainFs.SeqNo}");
             b.AppendLine($"  CheckSum: {MainFs.CheckSum}");
             b.AppendLine($"  NumFiles: {MainFsInodes.FindAll(s => s.Valid == 1).Count}");
@@ -689,7 +689,7 @@ namespace iQueTool.Files
 
                     b.AppendLine();
 
-                    b.AppendLine($"Fs-{i} (@ 0x{(FsBlocks[i] * BLOCK_SZ):X})");
+                    b.AppendLine($"Fs-{i} (0x{(FsBlocks[i] * BLOCK_SZ):X} / block {FsBlocks[i]})");
                     b.AppendLine($"  SeqNo: {FsHeaders[i].SeqNo}");
                     b.AppendLine($"  CheckSum: {FsHeaders[i].CheckSum}");
                     b.AppendLine($"  NumFiles: {FsInodes[i].FindAll(s => s.Valid == 1).Count}");

@@ -48,7 +48,7 @@ namespace iQueTool.Structs
         // tid >= 0x8000 is LP (limited play?)
         // tid >= 0x7000 && tid < 0x8000 is a "global ticket"
         // tid < 0x7000 is a permanent ticket
-        /* 0x29B0 */ public ushort TitleId; // ticketid? titleid? both terms seem to be used
+        /* 0x29B0 */ public ushort TicketId; // ticketid? titleid? both terms seem to be used
 
         /* 0x29B2 */ public uint TimeLimitMinutes;
 
@@ -65,7 +65,7 @@ namespace iQueTool.Structs
         // also note that 233 bits = 0x1D bytes (+1 bit)
         // unfortunately I don't have any wii keys.bin dumps to check out how the ECC keys are formatted, and neither do I have any ECC-signed wii savegames :(
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
-        /* 0x29BC */ public byte[] Unk29CC;
+        /* 0x29CC */ public byte[] Unk29CC;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
         /* 0x2A0C */ public char[] CertName; // always an XS cert (???), maybe CP is used to sign the content header (0 - 0x2858), and XS is to sign 0x29AC - 0x2A0C?
@@ -102,7 +102,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return TitleId >= 0x8000;
+                return TicketId >= 0x8000;
             }
         }
 
@@ -110,7 +110,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return TitleId >= 0x7000 && TitleId < 0x8000;
+                return TicketId >= 0x7000 && TicketId < 0x8000;
             }
         }
 
@@ -118,7 +118,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return TitleId < 0x7000;
+                return TicketId < 0x7000;
             }
         }
 
@@ -214,7 +214,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return $"{BBID:X}-{Ticket.ContentId}-{TitleId:X}";
+                return $"{BBID:X}-{Ticket.ContentId}-{TicketId:X}";
             }
         }
 
@@ -246,7 +246,7 @@ namespace iQueTool.Structs
             Ticket.EndianSwap();
 
             BBID = BBID.EndianSwap();
-            TitleId = TitleId.EndianSwap();
+            TicketId = TicketId.EndianSwap();
 
             TimeLimitMinutes = TimeLimitMinutes.EndianSwap();
 
@@ -342,7 +342,7 @@ namespace iQueTool.Structs
             else if (IsTicketPermanent)
                 ticketType = "permanent";
 
-            b.AppendLineSpace(fmt + $"TitleId: 0x{TitleId:X8} ({ticketType} ticket)");
+            b.AppendLineSpace(fmt + $"TicketId: 0x{TicketId:X8} ({ticketType} ticket)");
             b.AppendLineSpace(fmt + $"TimeLimitMinutes: {TimeLimitMinutes}");
 
             b.AppendLine();

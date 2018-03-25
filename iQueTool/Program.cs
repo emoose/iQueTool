@@ -433,7 +433,7 @@ namespace iQueTool
                                 continue;
                             }
 
-                            var tickets = arrayFile.FindAll(t => ((iQueTitleData)(object)t).TitleId == intID);
+                            var tickets = arrayFile.FindAll(t => ((iQueTitleData)(object)t).TicketId == intID);
                             if (tickets.Count <= 0)
                             {
                                 Console.WriteLine($"extractTIDs: failed to find ticket with TID {id}!");

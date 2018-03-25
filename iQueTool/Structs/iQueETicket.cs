@@ -22,7 +22,7 @@ namespace iQueTool.Structs
         /* 0x2814 */ public byte[] Unk2814;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x14)]
-        /* 0x2814 */ public byte[] ContentHash; // SHA1 hash of the decrypted content
+        /* 0x2824 */ public byte[] ContentHash; // SHA1 hash of the decrypted content
         
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
         /* 0x2838 */ public byte[] TitleKey; // appears to be the title key, based on different files having the same value for this field and bytes matching in the encdata
@@ -35,7 +35,7 @@ namespace iQueTool.Structs
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
         /* 0x2858 */ public char[] Authority; // always a CP cert, CP = content publisher?
 
-        /* 0x2898 */ public uint ContentId; // can't be higher than 99999999 ?? if (cid / 0x64) % 0xA == 9, this is "manual" download?
+        /* 0x2898 */ public uint ContentId; // can't be higher than 99999999 ?? if (cid / 100) % 10 == 9, this is a game manual
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
         /* 0x289C */ public byte[] TitleKeyAlt; // another key? changes between units while signature remains the same, is maybe decrypted in-place with per-box key and then signature verified?
@@ -50,6 +50,35 @@ namespace iQueTool.Structs
                 return Authority == null ? String.Empty : new string(Authority).Replace("\0", "").Replace("\r", "").Replace("\n", "");
             }
         }
+
+        public bool IsGameManual
+        {
+            get
+            {
+                return TitleId % 10 == 9; // last digit of titleid must be 9
+            }
+        }
+
+        public uint TitleId
+        {
+            get
+            {
+                if (ContentId < 10000)
+                    return ContentId / 1000; // 4-digit content id must be SKSA, discard last 3 digits
+                return ContentId / 100; // discard last 2 digits (version)
+            }
+        }
+
+        public uint TitleVersion
+        {
+            get
+            {
+                if (ContentId < 10000)
+                    return ContentId % 1000; // 4-digit content id must be SKSA, return last 3 digits of content id
+                return ContentId % 100; // last 2 digits of content id
+            }
+        }
+
 
         public byte[] DecryptTitleKey(byte[] commonKey, bool useIv = true)
         {
@@ -209,7 +238,7 @@ namespace iQueTool.Structs
 
             b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
 
-            b.AppendLineSpace(fmt + $"ContentId: {ContentId}");
+            b.AppendLineSpace(fmt + $"ContentId: {ContentId} (title: {TitleId}v{TitleVersion})");
             b.AppendLineSpace(fmt + $"ContentSize: {ContentSize}");
             b.AppendLineSpace(fmt + "ContentHash:" + Environment.NewLine + fmt + ContentHash.ToHexString());
 
