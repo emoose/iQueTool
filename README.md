@@ -2,7 +2,7 @@ iQueTool
 ========
 
 ```
-iQueTool 0.3: iQue Player file manipulator
+iQueTool 0.3a: iQue Player file manipulator
 Usage  : iquetool.exe [mode] [parameters] [filepath]
 
 Valid modes: nand / tickets / certs / crl / sparefix
@@ -55,4 +55,11 @@ iQue signature verification:
    To enable, drop a cert.sys file (taken from an iQue NAND) next to the iQueTool exe
    Alternatively you can put it at the root of your D: drive
    Also when opening a NAND image the cert.sys will automatically be loaded from it, if not already found locally
+   
+iQue Signature decryption:
+   To enable, libeay32.dll and ssleay32.dll must be in an x86 folder next to iQueTool.exe
+   eg. if iQueTool.exe is at D:\ique\iQueTool.exe, put the dlls inside D:\ique\x86\
+
+   If enabled iQueTool will print the expected hashes for any signed content, by decrypting the signature with the public key.
+   (this works for 90% of signed content on the device - but unfortunately as we don't have the 'Root' public key we can't decrypt any signatures made with it)
 ```

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using iQueTool.Files;
 
 namespace iQueTool.Structs
 {
@@ -8,7 +9,7 @@ namespace iQueTool.Structs
     public struct iQueCertificateRevocation
     {
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x200)]
-        public byte[] Signature;
+        public byte[] Signature; // doesn't seem to validate atm... probably checking wrong region
 
         public uint Unk200;
         public uint Unk204;
@@ -49,6 +50,51 @@ namespace iQueTool.Structs
             }
         }
 
+        public byte[] DecryptedSignature
+        {
+            get
+            {
+                if (iQueCertCollection.MainCollection == null)
+                    return null;
+
+                iQueCertificate authority;
+                if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
+                    return null;
+
+                return Shared.iQueSignatureDecrypt(Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+            }
+        }
+
+        public bool IsSignatureValid
+        {
+            get
+            {
+                if (iQueCertCollection.MainCollection == null)
+                    return false;
+
+                iQueCertificate authority;
+                if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
+                    return false;
+
+                byte[] data = Shared.StructToBytes(this);
+                byte[] dataNoSig = new byte[0x98];
+
+                Array.Copy(data, 0x200, dataNoSig, 0, 0x98); // remove first 0x200 bytes
+
+                var res = Shared.iQueSignatureVerify(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+                if (res)
+                    return true;
+
+                // sig verify failed, try endian swapping
+                EndianSwap();
+                data = Shared.StructToBytes(this);
+                Array.Copy(data, 0x200, dataNoSig, 0, 0x98);
+                EndianSwap();
+
+                return Shared.iQueSignatureVerify(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+            }
+        }
+
         public iQueCertificateRevocation EndianSwap()
         {
             Unk200 = Unk200.EndianSwap();
@@ -84,12 +130,35 @@ namespace iQueTool.Structs
 
             string fmt = formatted ? "    " : "";
 
+            var decSig = DecryptedSignature;
+            if (decSig != null)
+            {
+                if (decSig[0] == 0)
+                {
+                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
+                    b.AppendLineSpace("decSig[0] == 0!!");
+                    b.AppendLineSpace("LET EMOOSE KNOW!");
+                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
+                    b.AppendLine();
+                }
+                else if (decSig[1] == 0)
+                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
+                else if (decSig[2] == 0)
+                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
+            }
+
             b.AppendLineSpace(fmt + $"CertName: {CertNameString}");
             b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
             b.AppendLineSpace(fmt + $"Timestamp: {TimestampDateTime} ({Timestamp})");
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
+            
+            if (decSig != null)
+            {
+                b.AppendLine();
+                b.AppendLineSpace(fmt + "Expected Hash (decrypted from signature):" + Environment.NewLine + fmt + decSig.ToHexString());
+            }
 
             b.AppendLine();
             b.AppendLineSpace(fmt + $"Unk200: 0x{Unk200:X}");

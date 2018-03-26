@@ -275,7 +275,7 @@ namespace iQueTool
             return BitConverter.ToUInt64(data, 0);
         }
 
-        public static bool VerifyiQueSignature(byte[] data, byte[] signature, byte[] pubKeyModulus, byte[] pubKeyExponent)
+        public static bool iQueSignatureVerify(byte[] data, byte[] signature, byte[] pubKeyModulus, byte[] pubKeyExponent)
         {
             var hash = new SHA1Managed().ComputeHash(data);
 
@@ -293,6 +293,29 @@ namespace iQueTool
 
                 return RSADeformatter.VerifySignature(hash, sig);
             }
+        }
+
+        public static byte[] iQueSignatureDecrypt(byte[] signature, byte[] pubKeyModulus, byte[] pubKeyExponent)
+        {
+            var dir = Directory.GetCurrentDirectory();
+            if (!File.Exists(@"x86\libeay32.dll") || !File.Exists(@"x86\ssleay32.dll"))
+                return null; // can't find openssl dlls...
+
+            var sig = new byte[pubKeyModulus.Length];
+            Array.Copy(signature, sig, pubKeyModulus.Length);
+
+            var rsa = new OpenSSL.Crypto.RSA();
+            rsa.PublicModulus = OpenSSL.Core.BigNumber.FromArray(pubKeyModulus);
+            rsa.PublicExponent = OpenSSL.Core.BigNumber.FromArray(pubKeyExponent);
+
+            byte[] decsig = rsa.PublicDecrypt(sig, OpenSSL.Crypto.RSA.Padding.None);
+
+            // seems to use some kind of padding, PKCS1?
+            // might be why fakesigning failed to work - our fakesign sig would have bad padding
+            // need to find a signature that has retVal[0] below set to 0!
+            byte[] retVal = new byte[0x14];
+            Array.Copy(decsig, 236, retVal, 0, 0x14);
+            return retVal;
         }
 
         // from https://stackoverflow.com/questions/249760/how-can-i-convert-a-unix-timestamp-to-datetime-and-vice-versa

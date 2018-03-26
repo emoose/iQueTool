@@ -119,6 +119,21 @@ namespace iQueTool.Structs
             }
         }
 
+        public byte[] DecryptedSignature
+        {
+            get
+            {
+                if (iQueCertCollection.MainCollection == null)
+                    return null;
+
+                iQueCertificate authority;
+                if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
+                    return null;
+
+                return Shared.iQueSignatureDecrypt(Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+            }
+        }
+
         public bool IsSignatureValid
         {
             get
@@ -133,7 +148,7 @@ namespace iQueTool.Structs
                 byte[] data = Shared.StructToBytes(this);
                 Array.Resize(ref data, 0xAC);
 
-                var res = Shared.VerifyiQueSignature(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+                var res = Shared.iQueSignatureVerify(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
                 if (res)
                     return true;
 
@@ -143,7 +158,7 @@ namespace iQueTool.Structs
                 Array.Resize(ref data, 0xAC);
                 EndianSwap();
 
-                return Shared.VerifyiQueSignature(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+                return Shared.iQueSignatureVerify(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
             }
         }
 
@@ -229,6 +244,24 @@ namespace iQueTool.Structs
                 b.AppendLine($"{header}:");
 
             string fmt = formatted ? "    " : "";
+
+            var decSig = DecryptedSignature;
+            if (decSig != null)
+            {
+                if (decSig[0] == 0)
+                {
+                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
+                    b.AppendLineSpace("decSig[0] == 0!!");
+                    b.AppendLineSpace("LET EMOOSE KNOW!");
+                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
+                    b.AppendLine();
+                }
+                else if (decSig[1] == 0)
+                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
+                else if (decSig[2] == 0)
+                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
+            }
+
             if (iQueCertCollection.MainCollection == null)
                 b.AppendLineSpace(fmt + $"(Unable to verify RSA signature: cert.sys not found)");
             else
@@ -250,6 +283,16 @@ namespace iQueTool.Structs
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + "Ticket Hash:" + Environment.NewLine + fmt + TicketHash.ToHexString());
+            
+            if (decSig != null)
+            {
+                b.AppendLine();
+                b.AppendLineSpace(fmt + "Expected Hash (decrypted from signature):" + Environment.NewLine + fmt + decSig.ToHexString());
+            }
+
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Unk2800:" + Environment.NewLine + fmt + Unk2800.ToHexString());

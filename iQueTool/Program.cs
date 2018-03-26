@@ -76,7 +76,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.3: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.3a: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -119,8 +119,8 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-gs (-genspare) <dest-spare.bin-path> - generates block-spare/ECC data for this NAND");
                 Console.WriteLine(fmt + "-gp (-fullspare) - will generate page-spare/ECC data (0x20 pages per block) instead");
                 Console.WriteLine();
-                Console.WriteLine(fmt + "-fc (-fixchecksums) - skips verifying & repairs all FS checksums");
                 Console.WriteLine(fmt + "-sc (-skipchecksums) - skip verifying FS checksums");
+                Console.WriteLine(fmt + "-fc (-fixchecksums) - skips verifying & repairs all FS checksums");
                 Console.WriteLine(fmt + "-bd (-baddump) - will try reading inodes with a 0x10 byte offset");
                 Console.WriteLine();
                 Console.WriteLine("Mode \"sparefix\":");
@@ -138,6 +138,16 @@ namespace iQueTool
                     Console.WriteLine(fmt + "To enable, drop a cert.sys file (taken from an iQue NAND) next to the iQueTool exe");
                     Console.WriteLine(fmt + "Alternatively you can put it at the root of your D: drive");
                     Console.WriteLine(fmt + "Also when opening a NAND image the cert.sys will automatically be loaded from it, if not already found locally");
+                }
+                Console.WriteLine();
+
+                var sigDecEnabled = File.Exists(@"x86\libeay32.dll") && File.Exists(@"x86\ssleay32.dll");
+                Console.WriteLine("iQue Signature decryption: " + (sigDecEnabled ? "enabled" : "disabled"));
+                if(!sigDecEnabled)
+                {
+                    Console.WriteLine(fmt + "Decrypted signatures / expected hashes won't be shown!");
+                    Console.WriteLine(fmt + "To enable, libeay32.dll and ssleay32.dll must be in an x86 folder next to iQueTool.exe");
+                    Console.WriteLine(fmt + "eg. if iQueTool.exe is at D:\\ique\\iQueTool.exe, put the dlls inside D:\\ique\\x86\\");
                 }
                 Console.WriteLine();
                 return;

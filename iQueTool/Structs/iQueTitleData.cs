@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using iQueTool.Files;
 
 namespace iQueTool.Structs
 {
@@ -72,6 +73,21 @@ namespace iQueTool.Structs
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x100)]
         /* 0x2A4C */ public byte[] Signature; // signature? doesn't seem to verify no matter what I try...
+
+        public byte[] DecryptedSignature
+        {
+            get
+            {
+                if (iQueCertCollection.MainCollection == null)
+                    return null;
+
+                iQueCertificate authority;
+                if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
+                    return null;
+
+                return Shared.iQueSignatureDecrypt(Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
+            }
+        }
 
         public byte[] ThumbImage
         {
@@ -274,6 +290,23 @@ namespace iQueTool.Structs
 
             string fmt = formatted ? "    " : "";
 
+            var decSig = DecryptedSignature;
+            if (decSig != null)
+            {
+                if (decSig[0] == 0)
+                {
+                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
+                    b.AppendLineSpace("decSig[0] == 0!!");
+                    b.AppendLineSpace("LET EMOOSE KNOW!");
+                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
+                    b.AppendLine();
+                }
+                else if (decSig[1] == 0)
+                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
+                else if (decSig[2] == 0)
+                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
+            }
+
             // some stuff to alert me of unks that are different
             if (Unk2C != 0xB0000000)
                 b.AppendLineSpace(fmt + "Unk2C != 0xB0000000!");
@@ -346,6 +379,12 @@ namespace iQueTool.Structs
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
+
+            if (decSig != null)
+            {
+                b.AppendLine();
+                b.AppendLineSpace(fmt + "Expected Hash (decrypted from signature):" + Environment.NewLine + fmt + decSig.ToHexString());
+            }
 
             b.AppendLine();
 
