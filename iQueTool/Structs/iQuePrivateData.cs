@@ -20,7 +20,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return BBModel == null ? String.Empty : new string(BBModel).Replace("\0", "").Replace("\r", "").Replace("\n", "");
+                return Shared.NullTermCharsToString(BBModel).Replace("\0", "").Replace("\r", "").Replace("\n", "");
             }
         }
 

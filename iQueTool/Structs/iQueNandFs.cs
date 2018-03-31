@@ -44,8 +44,8 @@ namespace iQueTool.Structs
             {
                 if (Name == null && Extension == null)
                     return String.Empty;
-                var name = Name == null ? String.Empty : new string(Name).Replace("\0", "").Replace("\r", "").Replace("\n", "");
-                var ext = Extension == null ? String.Empty : new string(Extension).Replace("\0", "").Replace("\r", "").Replace("\n", "");
+                var name = Shared.NullTermCharsToString(Name).Replace("\0", "").Replace("\r", "").Replace("\n", "");
+                var ext = Shared.NullTermCharsToString(Extension).Replace("\0", "").Replace("\r", "").Replace("\n", "");
                 return $"{name}.{ext}";
             }
         }

@@ -333,5 +333,16 @@ namespace iQueTool
             dtDateTime = dtDateTime.AddSeconds(unixTimeStamp).ToLocalTime();
             return dtDateTime;
         }
+
+        public static string NullTermCharsToString(char[] chars)
+        {
+            if (chars == null)
+                return String.Empty;
+
+            var str = new string(chars);
+            var end = str.IndexOf('\0');
+
+            return end < 0 ? str : str.Remove(end);
+        }
     }
 }

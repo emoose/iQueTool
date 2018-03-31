@@ -221,7 +221,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return Authority == null ? String.Empty : new string(Authority).Replace("\0", "").Replace("\r", "").Replace("\n", "");
+                return Shared.NullTermCharsToString(Authority).Replace("\0", "").Replace("\r", "").Replace("\n", "");
             }
         }
 
