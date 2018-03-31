@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Numerics;
 
 namespace iQueTool
 {
@@ -294,27 +295,33 @@ namespace iQueTool
                 return RSADeformatter.VerifySignature(hash, sig);
             }
         }
+        private static BigInteger PrepareBigInteger(byte[] unsignedBigEndian)
+        {
+            // Leave an extra 0x00 byte so that the sign bit is clear
+            byte[] tmp = new byte[unsignedBigEndian.Length + 1];
+            Buffer.BlockCopy(unsignedBigEndian, 0, tmp, 1, unsignedBigEndian.Length);
+            Array.Reverse(tmp);
+            return new BigInteger(tmp);
+        }
 
         public static byte[] iQueSignatureDecrypt(byte[] signature, byte[] pubKeyModulus, byte[] pubKeyExponent)
         {
-            var dir = Directory.GetCurrentDirectory();
-            if (!File.Exists(@"x86\libeay32.dll") || !File.Exists(@"x86\ssleay32.dll"))
-                return null; // can't find openssl dlls...
-
+            // resize sig in case its too large
             var sig = new byte[pubKeyModulus.Length];
             Array.Copy(signature, sig, pubKeyModulus.Length);
 
-            var rsa = new OpenSSL.Crypto.RSA();
-            rsa.PublicModulus = OpenSSL.Core.BigNumber.FromArray(pubKeyModulus);
-            rsa.PublicExponent = OpenSSL.Core.BigNumber.FromArray(pubKeyExponent);
-
-            byte[] decsig = rsa.PublicDecrypt(sig, OpenSSL.Crypto.RSA.Padding.None);
+            BigInteger n = PrepareBigInteger(pubKeyModulus);
+            BigInteger e = PrepareBigInteger(pubKeyExponent);
+            BigInteger sig2 = PrepareBigInteger(sig);
+            BigInteger paddedMsgVal = BigInteger.ModPow(sig2, e, n);
+            byte[] paddedMsg = paddedMsgVal.ToByteArray();
+            Array.Reverse(paddedMsg);
 
             // seems to use some kind of padding, PKCS1?
             // might be why fakesigning failed to work - our fakesign sig would have bad padding
             // need to find a signature that has retVal[0] below set to 0!
             byte[] retVal = new byte[0x14];
-            Array.Copy(decsig, 236, retVal, 0, 0x14);
+            Array.Copy(paddedMsg, 235, retVal, 0, 0x14);
             return retVal;
         }
 

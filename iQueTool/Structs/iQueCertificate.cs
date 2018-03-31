@@ -23,6 +23,20 @@ namespace iQueTool.Structs
         /* 0x18C */ public byte[] PublicKeyExponent;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x200)]
         /* 0x190 */ public byte[] Signature; // signature of 0x0 - 0x190 made using Authority key
+        
+
+        public iQueCertificate(string authority, string certName, byte[] modulus)
+        {
+            Unk0 = 0;
+            Unk4 = 0;
+            Unk8 = 0;
+            Authority = authority.ToCharArray();
+            CertName = certName.ToCharArray();
+
+            PublicKeyModulus = modulus;
+            PublicKeyExponent = new byte[] { 0x00, 0x01, 0x00, 0x01 };
+            Signature = new byte[0x200];
+        }
 
         public string AuthorityString
         {
@@ -113,22 +127,10 @@ namespace iQueTool.Structs
 
             string fmt = formatted ? "    " : "";
 
-            var decSig = DecryptedSignature;
-            if (decSig != null)
-            {
-                if (decSig[0] == 0)
-                {
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLineSpace("decSig[0] == 0!!");
-                    b.AppendLineSpace("LET EMOOSE KNOW!");
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLine();
-                }
-                else if (decSig[1] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
-                else if (decSig[2] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
-            }
+            if (iQueCertCollection.MainCollection == null)
+                b.AppendLineSpace(fmt + $"(Unable to verify RSA signature: cert.sys not found)");
+            else
+                b.AppendLineSpace(fmt + $"(RSA signature {(IsSignatureValid ? "validated" : "appears invalid")})");
 
             b.AppendLineSpace(fmt + $"CertName: {CertNameString} ({(string.IsNullOrEmpty(AuthorityString) ? CertNameString : $"{AuthorityString}-{CertNameString}")})");
             b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
@@ -140,6 +142,7 @@ namespace iQueTool.Structs
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
 
+            var decSig = DecryptedSignature;
             if (decSig != null)
             {
                 b.AppendLine();

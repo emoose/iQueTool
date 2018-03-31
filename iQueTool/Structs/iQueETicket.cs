@@ -47,7 +47,7 @@ namespace iQueTool.Structs
         {
             get
             {
-                return Authority == null ? String.Empty : new string(Authority).Replace("\0", "").Replace("\r", "").Replace("\n", "");
+                return Authority == null ? String.Empty : new string(Authority).Replace("\0", "").Replace("\r", "").Replace("\n", ""); // todo: stop at first null instead of this replacing crap!
             }
         }
 

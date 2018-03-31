@@ -129,31 +129,15 @@ namespace iQueTool.Structs
                 b.AppendLine($"{header}:");
 
             string fmt = formatted ? "    " : "";
-
-            var decSig = DecryptedSignature;
-            if (decSig != null)
-            {
-                if (decSig[0] == 0)
-                {
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLineSpace("decSig[0] == 0!!");
-                    b.AppendLineSpace("LET EMOOSE KNOW!");
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLine();
-                }
-                else if (decSig[1] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
-                else if (decSig[2] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
-            }
-
+            
             b.AppendLineSpace(fmt + $"CertName: {CertNameString}");
             b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
             b.AppendLineSpace(fmt + $"Timestamp: {TimestampDateTime} ({Timestamp})");
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
-            
+
+            var decSig = DecryptedSignature;
             if (decSig != null)
             {
                 b.AppendLine();

@@ -43,8 +43,16 @@ namespace iQueTool
         {
             if (File.Exists("cert.sys"))
                 iQueCertCollection.MainCollection = new iQueCertCollection(File.ReadAllBytes("cert.sys"));
-            else if(File.Exists(@"D:\cert.sys")) // try reading from root of a drive, so we don't have to copy cert.sys with us everywhere
+            else if (File.Exists(@"D:\cert.sys")) // try reading from root of a drive, so we don't have to copy cert.sys with us everywhere
                 iQueCertCollection.MainCollection = new iQueCertCollection(File.ReadAllBytes(@"D:\cert.sys"));
+
+            if (iQueCertCollection.MainCollection != null)
+            {
+                if (File.Exists("ique_root.bin"))
+                    iQueCertCollection.MainCollection.Add(new iQueCertificate("", "Root", File.ReadAllBytes("ique_root.bin")));
+                else if (File.Exists(@"D:\ique_root.bin"))
+                    iQueCertCollection.MainCollection.Add(new iQueCertificate("", "Root", File.ReadAllBytes(@"D:\ique_root.bin")));
+            }
 
             const string fmt = "   ";
 
@@ -138,16 +146,6 @@ namespace iQueTool
                     Console.WriteLine(fmt + "To enable, drop a cert.sys file (taken from an iQue NAND) next to the iQueTool exe");
                     Console.WriteLine(fmt + "Alternatively you can put it at the root of your D: drive");
                     Console.WriteLine(fmt + "Also when opening a NAND image the cert.sys will automatically be loaded from it, if not already found locally");
-                }
-                Console.WriteLine();
-
-                var sigDecEnabled = File.Exists(@"x86\libeay32.dll") && File.Exists(@"x86\ssleay32.dll");
-                Console.WriteLine("iQue Signature decryption: " + (sigDecEnabled ? "enabled" : "disabled"));
-                if(!sigDecEnabled)
-                {
-                    Console.WriteLine(fmt + "Decrypted signatures / expected hashes won't be shown!");
-                    Console.WriteLine(fmt + "To enable, libeay32.dll and ssleay32.dll must be in an x86 folder next to iQueTool.exe");
-                    Console.WriteLine(fmt + "eg. if iQueTool.exe is at D:\\ique\\iQueTool.exe, put the dlls inside D:\\ique\\x86\\");
                 }
                 Console.WriteLine();
                 return;
