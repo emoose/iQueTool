@@ -162,65 +162,6 @@ namespace iQueTool.Structs
             }
         }
 
-        public bool IsFakeSigned
-        {
-            get
-            {
-                var hash = TicketHash;
-                var decSig = DecryptedSignature;
-                if (DecryptedSignature == null)
-                    return false; // Authority is invalid? (or no iQueCertCollection.MainCollection loaded)
-
-                return hash[0] == 0 && decSig[0] == 0 && !IsSignatureValid;
-            }
-        }
-
-        public bool FakeSign(out byte[] fakeSignedTicket, bool alternateMethod = false)
-        {
-            // fake/trucha sign the ticket
-            byte[] data = GetBytes();
-            Array.Resize(ref data, 0xAC);
-
-            var sha1 = new SHA1Managed();
-
-            byte[] hash = sha1.ComputeHash(data);
-            bool success = hash[0] == 0;
-            if (!success) // have to change a part of the ticket so that first byte of hash is 0
-            {
-                for (ulong i = 0; i < (alternateMethod ? uint.MaxValue : ulong.MaxValue); i++)
-                {
-                    if (alternateMethod)
-                    {
-                        byte[] i_bytes = BitConverter.GetBytes((uint)i);
-                        Array.Copy(i_bytes, 0, data, 0x54, 4); // change Unk2854 field
-                    }
-                    else
-                    { 
-                        byte[] i_bytes = BitConverter.GetBytes(i);
-                        Array.Copy(i_bytes, 0, data, 0x90, 8); // change last 8 chars of the Authority field (assuming that iQue will only use the parts of the Authority field up to the first null..)
-                    }
-
-                    hash = sha1.ComputeHash(data);
-                    if (hash[0] == 0)
-                    {
-                        success = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!success)
-            {
-                fakeSignedTicket = null;
-                return false;
-            }
-
-            Array.Resize(ref data, 0x1AC); // add 0x100 bytes, which gives us a nulled out signature field
-
-            fakeSignedTicket = data;
-            return true;
-        }
-
         public void EndianSwap()
         {
             Unk2808 = Unk2808.EndianSwap();
@@ -259,26 +200,11 @@ namespace iQueTool.Structs
             string fmt = formatted ? "    " : "";
 
             var decSig = DecryptedSignature;
-            if (decSig != null && !IsFakeSigned)
-            {
-                if (decSig[0] == 0)
-                {
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLineSpace("decSig[0] == 0!!");
-                    b.AppendLineSpace("LET EMOOSE KNOW!");
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLine();
-                }
-                else if (decSig[1] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
-                else if (decSig[2] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
-            }
 
             if (iQueCertCollection.MainCollection == null)
                 b.AppendLineSpace(fmt + $"(Unable to verify RSA signature: cert.sys not found)");
             else
-                b.AppendLineSpace(fmt + $"(RSA signature {(IsFakeSigned ? "is fakesigned" : (IsSignatureValid ? "validated" : "appears invalid"))})");
+                b.AppendLineSpace(fmt + $"(RSA signature {(IsSignatureValid ? "validated" : "appears invalid")})");
 
             b.AppendLine();
 
