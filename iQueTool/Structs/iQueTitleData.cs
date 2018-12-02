@@ -11,23 +11,23 @@ namespace iQueTool.Structs
         // unsure if the flags fields below are actually flags
         // they seem to be set to 0x807C0000 if that save storage method is used though
 
-        /* 0x0    */ public uint EepromFlags;
+        /* 0x0    */ public uint EepromAddress;
         /* 0x4    */ public uint EepromSize;
-        /* 0x8    */ public uint FlashFlags;
+        /* 0x8    */ public uint FlashAddress;
         /* 0xC    */ public uint FlashSize;
-        /* 0x10   */ public uint SramFlags;
+        /* 0x10   */ public uint SramAddress;
         /* 0x14   */ public uint SramSize;
 
-        /* 0x18   */ public uint Controller1Flags; // controller 1 addon flags? (rumble / controller pak / ???)
-        /* 0x1C   */ public uint Controller2Flags; // controller 2 addon flags? (rumble / controller pak / ???)
-        /* 0x20   */ public uint Controller3Flags; // controller 3 addon flags? (rumble / controller pak / ???)
-        /* 0x24   */ public uint Controller4Flags; // controller 4 addon flags? (rumble / controller pak / ???)
+        /* 0x18   */ public uint ControllerPak0Address; // controller 1 addon flags? (rumble / controller pak / ???)
+        /* 0x1C   */ public uint ControllerPak1Address; // controller 2 addon flags? (rumble / controller pak / ???)
+        /* 0x20   */ public uint ControllerPak2Address; // controller 3 addon flags? (rumble / controller pak / ???)
+        /* 0x24   */ public uint ControllerPak3Address; // controller 4 addon flags? (rumble / controller pak / ???)
         /* 0x28   */ public uint ControllerPakSize; // saves to a .u0* file if NumU0XFiles > 0?
 
-        /* 0x2C   */ public uint Unk2C; // always 0xB0000000?
+        /* 0x2C   */ public uint osRomBase; // always 0xB0000000?
 
-        /* 0x30   */ public uint Unk30; // always 1?
-        /* 0x34   */ public uint Unk34; // always 0x400000?
+        /* 0x30   */ public uint osTvType; // always 1?
+        /* 0x34   */ public uint osMemSize; // always 0x400000?
         /* 0x38   */ public uint Unk38; // always 0?
         /* 0x3C   */ public uint Unk3C; // always 0?
         
@@ -51,22 +51,20 @@ namespace iQueTool.Structs
         // tid < 0x7000 is a permanent ticket
         /* 0x29B0 */ public ushort TicketId; // ticketid? titleid? both terms seem to be used
 
-        /* 0x29B2 */ public uint TimeLimitMinutes;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x6)]
-        /* 0x29B6 */ public byte[] Unk29B6; // all 00 in etickets, but set in game tickets? (update: i have no idea what i meant by this)
+        /* 0x29B2 */ public ushort TrialType;
+        /* 0x29B4 */ public ushort TrialLimit; // number of minutes/launches for this trial
         
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
-        /* 0x29BC */ public byte[] Unk29BC;
+        /* 0x29B6 */ public ushort UnusedReserved;
 
-        // next field is weird.. think it's ECC / ECDSA / ECDH related
-        // some bytes inside sig.db / recrypt.sys also seem to follow the same format of it, ie:
-        // [00 00 0*] [0x1D bytes] [00 00 0*] [another 0x1D bytes]
-        // on Wii apparently 233-bit ECC private keys are 0x1E bytes, while the public keys/signatures are 0x3C bytes long, very close to the size of these fields...
-        // also note that 233 bits = 0x1D bytes (+1 bit)
-        // unfortunately I don't have any wii keys.bin dumps to check out how the ECC keys are formatted, and neither do I have any ECC-signed wii savegames :(
+        /* 0x29B8 */ public uint TSCRLVersion; // ticket_crl_version?
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        /* 0x29BC */ public byte[] CMD_IV; // titlekey_iv? isn't this already set in CMD?
+
+        // from iquebrew:
+        // ECC public key used with console's ECC private key to derive unique title key encryption key via ECDH
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
-        /* 0x29CC */ public byte[] Unk29CC;
+        /* 0x29CC */ public byte[] ServerECCKey;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
         /* 0x2A0C */ public char[] Authority; // always an XS (exchange server) cert?
@@ -236,23 +234,23 @@ namespace iQueTool.Structs
 
         public iQueTitleData EndianSwap()
         { 
-            EepromFlags = EepromFlags.EndianSwap();
+            EepromAddress = EepromAddress.EndianSwap();
             EepromSize = EepromSize.EndianSwap();
-            FlashFlags = FlashFlags.EndianSwap();
+            FlashAddress = FlashAddress.EndianSwap();
             FlashSize = FlashSize.EndianSwap();
-            SramFlags = SramFlags.EndianSwap();
+            SramAddress = SramAddress.EndianSwap();
             SramSize = SramSize.EndianSwap();
 
-            Controller1Flags = Controller1Flags.EndianSwap();
-            Controller2Flags = Controller2Flags.EndianSwap();
-            Controller3Flags = Controller3Flags.EndianSwap();
-            Controller4Flags = Controller4Flags.EndianSwap();
+            ControllerPak0Address = ControllerPak0Address.EndianSwap();
+            ControllerPak1Address = ControllerPak1Address.EndianSwap();
+            ControllerPak2Address = ControllerPak2Address.EndianSwap();
+            ControllerPak3Address = ControllerPak3Address.EndianSwap();
             ControllerPakSize = ControllerPakSize.EndianSwap();
 
-            Unk2C = Unk2C.EndianSwap();
+            osRomBase = osRomBase.EndianSwap();
+            osTvType = osTvType.EndianSwap();
+            osMemSize = osMemSize.EndianSwap();
 
-            Unk30 = Unk30.EndianSwap();
-            Unk34 = Unk34.EndianSwap();
             Unk38 = Unk38.EndianSwap();
             Unk3C = Unk3C.EndianSwap();
             
@@ -264,7 +262,11 @@ namespace iQueTool.Structs
             BBID = BBID.EndianSwap();
             TicketId = TicketId.EndianSwap();
 
-            TimeLimitMinutes = TimeLimitMinutes.EndianSwap();
+            TrialType = TrialType.EndianSwap();
+            TrialLimit = TrialLimit.EndianSwap();
+
+            UnusedReserved = UnusedReserved.EndianSwap();
+            TSCRLVersion = TSCRLVersion.EndianSwap();
 
             return this;
         }
@@ -290,31 +292,7 @@ namespace iQueTool.Structs
 
             string fmt = formatted ? "    " : "";
 
-            var decSig = DecryptedSignature;
-            if (decSig != null)
-            {
-                if (decSig[0] == 0)
-                {
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLineSpace("decSig[0] == 0!!");
-                    b.AppendLineSpace("LET EMOOSE KNOW!");
-                    b.AppendLineSpace("!!!!!!!!!!!!!!!!");
-                    b.AppendLine();
-                }
-                else if (decSig[1] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[1] == 0 !!!!");
-                else if (decSig[2] == 0)
-                    b.AppendLineSpace(fmt + "!!!! decSig[2] == 0 !!!!");
-            }
-
             // some stuff to alert me of unks that are different
-            if (Unk2C != 0xB0000000)
-                b.AppendLineSpace(fmt + "Unk2C != 0xB0000000!");
-
-            if (Unk30 != 1)
-                b.AppendLineSpace(fmt + "Unk30 != 1!");
-            if (Unk34 != 0x400000)
-                b.AppendLineSpace(fmt + "Unk34 != 0x400000!");
             if (Unk38 != 0)
                 b.AppendLineSpace(fmt + "Unk38 != 0!");
             if (Unk3C != 0)
@@ -325,32 +303,30 @@ namespace iQueTool.Structs
             if (TitleImgLength > 0x10000) // unsure how this can even be possible, but it seems to get checked anyway
                 b.AppendLineSpace(fmt + "TitleImgLength > 0x10000! (invalid?)");
 
-            if (Ticket.Unk2848 != 2)
-                b.AppendLineSpace(fmt + "Ticket.Unk2848 != 2!");
-            if (Ticket.Unk284C != 0)
-                b.AppendLineSpace(fmt + "Ticket.Unk284C != 0!");
-            if (Ticket.Unk2850 != 0x4000)
-                b.AppendLineSpace(fmt + "Ticket.Unk2850 != 0x4000!");
-            if (Ticket.Unk2854 != 0)
-                b.AppendLineSpace(fmt + "Ticket.Unk2854 != 0!");
-
             if (Ticket.ContentId > 99999999)
                 b.AppendLineSpace(fmt + "Ticket.ContentId > 99999999! (invalid?)");
-            if (!Unk29B6.IsArrayEmpty())
-                b.AppendLineSpace(fmt + "Unk29B6 != null!");
+            if (UnusedReserved != 0)
+                b.AppendLineSpace(fmt + $"UnusedReserved != 0! (0x{UnusedReserved:X4})");
 
             b.AppendLine();
 
-            b.AppendLineSpace(fmt + $"EepromSize: {EepromSize} bytes (flags: 0x{EepromFlags:X8})");
-            b.AppendLineSpace(fmt + $"FlashSize: {FlashSize} bytes (flags: 0x{FlashFlags:X8})");
-            b.AppendLineSpace(fmt + $"SramSize: {SramSize} bytes (flags: 0x{SramFlags:X8})");
+            b.AppendLineSpace(fmt + $"EepromAddress: 0x{EepromAddress:X8}, size: 0x{EepromSize:X}");
+            b.AppendLineSpace(fmt + $"FlashAddress: 0x{FlashAddress:X8}, size: 0x{FlashSize:X}");
+            b.AppendLineSpace(fmt + $"SramAddress: 0x{SramAddress:X8}, size: 0x{SramSize:X}");
 
             b.AppendLine();
-            b.AppendLineSpace(fmt + $"Controller1Flags: 0x{Controller1Flags:X}");
-            b.AppendLineSpace(fmt + $"Controller2Flags: 0x{Controller2Flags:X}");
-            b.AppendLineSpace(fmt + $"Controller3Flags: 0x{Controller3Flags:X}");
-            b.AppendLineSpace(fmt + $"Controller4Flags: 0x{Controller4Flags:X}");
+            b.AppendLineSpace(fmt + $"ControllerPak0Address: 0x{ControllerPak0Address:X}");
+            b.AppendLineSpace(fmt + $"ControllerPak1Address: 0x{ControllerPak1Address:X}");
+            b.AppendLineSpace(fmt + $"ControllerPak2Address: 0x{ControllerPak2Address:X}");
+            b.AppendLineSpace(fmt + $"ControllerPak3Address: 0x{ControllerPak3Address:X}");
             b.AppendLineSpace(fmt + $"ControllerPakSize: 0x{ControllerPakSize:X}");
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + $"osRomBase: 0x{osRomBase:X8}");
+            b.AppendLineSpace(fmt + $"osTvType: 0x{osTvType:X8}");
+            b.AppendLineSpace(fmt + $"osMemSize: 0x{osMemSize:X8}");
+            b.AppendLineSpace(fmt + $"Unk38: 0x{Unk38:X8}");
+            b.AppendLineSpace(fmt + $"Unk3C: 0x{Unk3C:X8}");
 
             b.AppendLine();
             b.AppendLineSpace(fmt + $"NumU0XFiles: 0x{NumU0XFiles:X}");
@@ -372,7 +348,18 @@ namespace iQueTool.Structs
                 ticketType = "permanent";
 
             b.AppendLineSpace(fmt + $"TicketId: 0x{TicketId:X8} ({ticketType} ticket)");
-            b.AppendLineSpace(fmt + $"TimeLimitMinutes: {TimeLimitMinutes}");
+
+            string trialType = TrialType == 1 ? "launch count" : (TrialType == 2 ? "time-limited" : "time-limited or not trial");
+
+            b.AppendLineSpace(fmt + $"TrialType: {TrialType} ({trialType})");
+
+            b.AppendLineSpace(fmt + $"TSCRLVersion / ticket_crl_version: {TSCRLVersion}");
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + "CMD_IV / titlekey_iv:" + Environment.NewLine + fmt + CMD_IV.ToHexString());
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + "ServerECCKey:" + Environment.NewLine + fmt + ServerECCKey.ToHexString());
 
             b.AppendLine();
             b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
@@ -380,6 +367,7 @@ namespace iQueTool.Structs
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
 
+            var decSig = DecryptedSignature;
             if (decSig != null)
             {
                 b.AppendLine();
@@ -388,23 +376,8 @@ namespace iQueTool.Structs
 
             b.AppendLine();
 
-            b.AppendLineSpace(fmt + $"Unk2C: 0x{Unk2C:X}");
-            b.AppendLineSpace(fmt + $"Unk30: 0x{Unk30:X}");
-            b.AppendLineSpace(fmt + $"Unk34: 0x{Unk34:X}");
-            b.AppendLineSpace(fmt + $"Unk38: 0x{Unk38:X}");
-            b.AppendLineSpace(fmt + $"Unk3C: 0x{Unk3C:X}");
-
             b.AppendLine();
             b.AppendLineSpace(fmt + "Unk40:" + Environment.NewLine + fmt + Unk40.ToHexString());
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + "Unk29B6:" + Environment.NewLine + fmt + Unk29B6.ToHexString());
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + "Unk29BC:" + Environment.NewLine + fmt + Unk29BC.ToHexString());
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + "Unk29CC:" + Environment.NewLine + fmt + Unk29CC.ToHexString());
 
             b.AppendLine();
             b.AppendLineSpace(Ticket.ToString(formatted, header + ".iQueETicket"));

@@ -9,28 +9,28 @@ namespace iQueTool.Structs
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct iQueETicket
     {
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x8)]
-        /* 0x2800 */ public byte[] Unk2800; // always 0?
+        /* 0x2800 */ public uint UnusedPadding; // always 0?
 
-        /* 0x2808 */ public uint Unk2808; // always 1?
+        /* 0x2804 */ public uint CACRLVersion;
+        /* 0x2808 */ public uint CPCRLVersion;
 
         /* 0x280C */ public uint ContentSize;
 
-        /* 0x2810 */ public uint Unk2810; // 0 for tickets, 1 for SA? maybe title-type? or common-key idx?
+        /* 0x2810 */ public uint ContentFlags; // 0 for tickets, 1 for SA?
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
-        /* 0x2814 */ public byte[] Unk2814;
+        /* 0x2814 */ public byte[] TitleKeyIV;
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x14)]
         /* 0x2824 */ public byte[] ContentHash; // SHA1 hash of the decrypted content
         
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
-        /* 0x2838 */ public byte[] TitleKey; // appears to be the title key, based on different files having the same value for this field and bytes matching in the encdata
+        /* 0x2838 */ public byte[] EncryptionIV; 
 
-        /* 0x2848 */ public uint Unk2848; // 2 for game tickets, 0 for SA/iQue Club tickets
-        /* 0x284C */ public uint Unk284C; // device type maybe? 0 for game tickets, 0x1F7 for normal SAs, 0x1B3 for weird (0 byte/3MB) SAs (but 0x13 for iQue Club ticket..)
-        /* 0x2850 */ public uint Unk2850; // access rights? 0x4000 for games, 0xFFFFFFFF for normal SAs, 0xE01 for weird SAs, 0x6001 for iQue Club
-        /* 0x2854 */ public uint Unk2854; // always 0? 
+        /* 0x2848 */ public uint ExecutionFlags; // 2 for game tickets, 0 for SA/iQue Club tickets
+        /* 0x284C */ public uint AccessRights; // 0 for game tickets, 0x1F7 for normal SAs, 0x1B3 for weird (0 byte/3MB) SAs (but 0x13 for iQue Club ticket..)
+        /* 0x2850 */ public uint KernelRights; // 0x4000 for games, 0xFFFFFFFF for normal SAs, 0xE01 for weird SAs, 0x6001 for iQue Club
+        /* 0x2854 */ public uint BoundBBID; // if non-zero, app can only be ran by this BBID
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
         /* 0x2858 */ public char[] Authority; // always a CP cert, CP = content publisher?
@@ -38,10 +38,10 @@ namespace iQueTool.Structs
         /* 0x2898 */ public uint ContentId; // can't be higher than 99999999 ?? if (cid / 100) % 10 == 9, this is a game manual
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
-        /* 0x289C */ public byte[] TitleKeyAlt; // another key? changes between units while signature remains the same, is maybe decrypted in-place with per-box key and then signature verified?
+        /* 0x289C */ public byte[] TitleKey; // encrypted with common key if SA, or common key + console ECDH key if app
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x100)]
-        /* 0x28AC */ public byte[] Signature; // signature of 0x0 - 0xAC, verifies fine with the ticket inside SKSA (@ 0x10000), but can't seem to verify tickets inside ticket.sys ;_;
+        /* 0x28AC */ public byte[] Signature; // signature of 0x0 - 0xAC, before title key is encrypted with console ECDH key
 
         public string AuthorityString
         {
@@ -164,16 +164,16 @@ namespace iQueTool.Structs
 
         public void EndianSwap()
         {
-            Unk2808 = Unk2808.EndianSwap();
+            CACRLVersion = CACRLVersion.EndianSwap();
+            CPCRLVersion = CPCRLVersion.EndianSwap();
 
             ContentSize = ContentSize.EndianSwap();
+            ContentFlags = ContentFlags.EndianSwap();
 
-            Unk2810 = Unk2810.EndianSwap();
-
-            Unk2848 = Unk2848.EndianSwap();
-            Unk284C = Unk284C.EndianSwap();
-            Unk2850 = Unk2850.EndianSwap();
-            Unk2854 = Unk2854.EndianSwap();
+            ExecutionFlags = ExecutionFlags.EndianSwap();
+            AccessRights = AccessRights.EndianSwap();
+            KernelRights = KernelRights.EndianSwap();
+            BoundBBID = BoundBBID.EndianSwap();
 
             ContentId = ContentId.EndianSwap();
         }
@@ -199,7 +199,8 @@ namespace iQueTool.Structs
 
             string fmt = formatted ? "    " : "";
 
-            var decSig = DecryptedSignature;
+            if (UnusedPadding != 0)
+                b.AppendLineSpace(fmt + $"UnusedPadding != 0! (0x{UnusedPadding:X8})");
 
             if (iQueCertCollection.MainCollection == null)
                 b.AppendLineSpace(fmt + $"(Unable to verify RSA signature: cert.sys not found)");
@@ -208,47 +209,43 @@ namespace iQueTool.Structs
 
             b.AppendLine();
 
-            b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
-
             b.AppendLineSpace(fmt + $"ContentId: {ContentId} (title: {TitleId}v{TitleVersion})");
             b.AppendLineSpace(fmt + $"ContentSize: {ContentSize}");
             b.AppendLineSpace(fmt + "ContentHash:" + Environment.NewLine + fmt + ContentHash.ToHexString());
 
             b.AppendLine();
-            b.AppendLineSpace(fmt + "TitleKey?:" + Environment.NewLine + fmt + TitleKey.ToHexString());
+            b.AppendLineSpace(fmt + $"ContentFlags: 0x{ContentFlags:X8}");
+            b.AppendLineSpace(fmt + $"ExecutionFlags: 0x{ExecutionFlags:X8}");
+            b.AppendLineSpace(fmt + $"AccessRights: 0x{AccessRights:X8}");
+            b.AppendLineSpace(fmt + $"KernelRights: 0x{KernelRights:X8}");
+
+            if(BoundBBID != 0) // only output BoundBBID if it's actually set
+                b.AppendLineSpace(fmt + $"BoundBBID: {BoundBBID}");
 
             b.AppendLine();
-            b.AppendLineSpace(fmt + "TitleKeyAlt?:" + Environment.NewLine + fmt + TitleKeyAlt.ToHexString());
+            b.AppendLineSpace(fmt + "TitleKey:" + Environment.NewLine + fmt + TitleKey.ToHexString());
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + "TitleKeyIV:" + Environment.NewLine + fmt + TitleKeyIV.ToHexString());
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + "EncryptionIV:" + Environment.NewLine + fmt + EncryptionIV.ToHexString());
+
+            b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Ticket Hash:" + Environment.NewLine + fmt + TicketHash.ToHexString());
-            
+
+            var decSig = DecryptedSignature;
             if (decSig != null)
             {
                 b.AppendLine();
                 b.AppendLineSpace(fmt + "Expected Hash (decrypted from signature):" + Environment.NewLine + fmt + decSig.ToHexString());
             }
-
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + "Unk2800:" + Environment.NewLine + fmt + Unk2800.ToHexString());
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + $"Unk2808: 0x{Unk2808:X}");
-            b.AppendLineSpace(fmt + $"Unk2810: 0x{Unk2810:X}");
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + "Unk2814:" + Environment.NewLine + fmt + Unk2814.ToHexString());
-
-            b.AppendLine();
-            b.AppendLineSpace(fmt + $"Unk2848: 0x{Unk2848:X}");
-            b.AppendLineSpace(fmt + $"Unk284C: 0x{Unk284C:X}");
-            b.AppendLineSpace(fmt + $"Unk2850: 0x{Unk2850:X}");
-            b.AppendLineSpace(fmt + $"Unk2854: 0x{Unk2854:X}");
-
+            
             return b.ToString();
         }
     }
