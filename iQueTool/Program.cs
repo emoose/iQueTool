@@ -21,6 +21,9 @@ namespace iQueTool
         static string extractTIDs = String.Empty;
         static string extractIDs = String.Empty;
 
+        static string addFiles = String.Empty;
+        static string addFilesList = String.Empty;
+
         static bool extractKernel = false;
         
         static bool writeNewTicketFile = false;
@@ -66,6 +69,9 @@ namespace iQueTool
                 { "xc|extractcids=", v => extractContentIds = v },
                 { "xt|extracttids=", v => extractTIDs = v },
                 { "xi|extractids=", v => extractIDs = v },
+
+                { "a|addfile=", v => addFiles = v },
+                { "al|addlist=", v => addFilesList = v },
 
                 { "xk|extractkernel", v => extractKernel = v != null },
                 { "fs|showallfs", v => showAllFsInfo = v != null },
@@ -119,6 +125,9 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes");
                 Console.WriteLine(fmt + "-xk (-extractkernel) - extract secure-kernel from NAND");
                 Console.WriteLine(fmt + "-fs (-showallfs) - shows info about all found FS blocks");
+                Console.WriteLine();
+                Console.WriteLine(fmt + "-a <comma-delimited-filepaths> - adds file to NAND");
+                Console.WriteLine(fmt + "-al (-addlist) <path-to-list-of-files> - adds line-seperated list of files to NAND");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA");
                 Console.WriteLine(fmt + fmt + "also takes bad-blocks into account and will work around them");
@@ -276,6 +285,61 @@ namespace iQueTool
                 return;
             }
 
+            if(!string.IsNullOrEmpty(addFiles) || !string.IsNullOrEmpty(addFilesList))
+            {
+                var filesToAdd = new List<string>();
+                if(!string.IsNullOrEmpty(addFiles))
+                {
+                    var files = addFiles.Split(',');
+                    filesToAdd.AddRange(files);
+                }
+
+                if(!string.IsNullOrEmpty(addFilesList))
+                {
+                    if(File.Exists(addFilesList))
+                    {
+                        var files = File.ReadAllLines(addFilesList);
+                        filesToAdd.AddRange(files);
+                    }
+                    else
+                        Console.WriteLine($"[!] -al (addlist) failed, list {addFilesList} doesn't exist!");
+                }
+
+                if(filesToAdd.Count > 0)
+                {
+                    int successful = 0;
+                    foreach(var file in filesToAdd)
+                    {
+                        if(File.Exists(file))
+                        {
+                            Console.WriteLine($"Adding file to NAND: {file}");
+                            BbInode node = new BbInode();
+                            if (nandFile.FileWrite(Path.GetFileName(file), File.ReadAllBytes(file), ref node))
+                            {
+                                Console.WriteLine($"File added successfully! name: {node.NameString}, block: {node.BlockIdx}");
+                                successful++;
+                            }
+                            else
+                                Console.WriteLine($"[!] Failed to add file, likely not enough free space in nand!");
+                        }
+                        else
+                            Console.WriteLine($"[!] Failed to add non-existing file:{Environment.NewLine}\t{file}");
+                    }
+                    if(successful > 0)
+                    {
+                        Console.WriteLine("Writing updated FS to NAND...");
+                        if (nandFile.WriteFilesystem())
+                            Console.WriteLine($"Added {successful} files successfully!");
+                        else
+                            Console.WriteLine("[!] Failed to write updated FS, couldn't find FS block to write?");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[!] -al (addlist) failed, no files to add!");
+                }
+            }
+
             if (fixFsChecksums)
                 nandFile.RepairFsChecksums();
 
@@ -317,7 +381,7 @@ namespace iQueTool
 
                         var extPath = Path.Combine(outputFile, file.NameString);
                         Console.WriteLine($"Writing file to {extPath}");
-                        File.WriteAllBytes(extPath, nandFile.GetInodeData(file));
+                        File.WriteAllBytes(extPath, nandFile.FileRead(file));
                         count++;
                     }
 

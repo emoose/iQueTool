@@ -36,17 +36,20 @@ namespace iQueTool.Files
         public List<int> FsBadBlocks;
 
         // todo: put next 3 fields in an iQueNandFs class?
-        public List<iQueFsHeader> FsHeaders;
+        public List<BbFat16> FsHeaders;
         // read table as signed so we can treat end-of-chain and sys-allocated blocks as negative numbers
         // if there were more than 0x8000 blocks in a nand we really shouldn't do this, but luckily there aren't
         public List<List<short>> FsAllocationTables;
-        public List<List<iQueFsInode>> FsInodes;
+        public List<List<BbInode>> FsInodes;
 
-        public iQueFsHeader MainFs;
+        public BbFat16 MainFs;
         public int MainFsBlock;
         public int MainFsIndex = -1;
 
-        public List<iQueFsInode> MainFsInodes
+        public List<BbInode> ModifiedInodes;
+        public List<short> ModifiedAllocTable;
+
+        public List<BbInode> MainFsInodes
         {
             get
             {
@@ -279,45 +282,6 @@ namespace iQueTool.Files
             return true;
         }
 
-        public byte[] GetChainData(short[] chain)
-        {
-            var data = new byte[chain.Length * 0x4000];
-
-            for (int i = 0; i < chain.Length; i++)
-            {
-                io.Stream.Position = chain[i] * BLOCK_SZ;
-
-                int numRead = BLOCK_SZ;
-
-                var blockData = io.Reader.ReadBytes(numRead);
-                Array.Copy(blockData, 0, data, i * BLOCK_SZ, numRead);
-            }
-
-            return data;
-        }
-
-        public byte[] GetInodeData(iQueFsInode inode)
-        {
-            var data = new byte[inode.Size];
-            var chain = GetBlockChain(inode.BlockIdx);
-
-            for(int i = 0; i < chain.Length; i++)
-            {
-                io.Stream.Position = chain[i] * BLOCK_SZ;
-
-                int numRead = BLOCK_SZ;
-                if (i + 1 == chain.Length)
-                    numRead = (int)(inode.Size % BLOCK_SZ);
-                if (numRead == 0)
-                    numRead = BLOCK_SZ;
-
-                var blockData = io.Reader.ReadBytes(numRead);
-                Array.Copy(blockData, 0, data, i * BLOCK_SZ, numRead);
-            }
-
-            return data;
-        }
-
         public bool Read()
         {
             var numBlocks = (int)(io.Stream.Length / BLOCK_SZ);
@@ -335,7 +299,7 @@ namespace iQueTool.Files
             int idx = GetInodeIdx("cert.sys");
             if (idx >= 0)
             {
-                var data = GetInodeData(MainFsInodes[idx]);
+                var data = FileRead(MainFsInodes[idx]);
                 Certs = new iQueCertCollection(data);
                 if (iQueCertCollection.MainCollection == null)
                     iQueCertCollection.MainCollection = new iQueCertCollection(data); // MainCollection wasn't loaded already, so lets try loading it from this nand (yolo)
@@ -345,7 +309,7 @@ namespace iQueTool.Files
             HasPrivateData = idx >= 0;
             if(HasPrivateData)
             {
-                var data = GetInodeData(MainFsInodes[idx]);
+                var data = FileRead(MainFsInodes[idx]);
                 PrivateData = Shared.BytesToStruct<iQuePrivateData>(data);
                 //PrivateData.EndianSwap();
             }
@@ -353,7 +317,7 @@ namespace iQueTool.Files
             idx = GetInodeIdx("ticket.sys");
             if(idx >= 0)
             {
-                var data = GetInodeData(MainFsInodes[idx]);
+                var data = FileRead(MainFsInodes[idx]);
                 Tickets = new iQueArrayFile<OSBbSaGameMetaData>(data);
                 for (int i = 0; i < Tickets.Count; i++)
                     Tickets[i] = Tickets[i].EndianSwap();
@@ -362,7 +326,7 @@ namespace iQueTool.Files
             idx = GetInodeIdx("crl.sys");
             if (idx >= 0)
             {
-                var data = GetInodeData(MainFsInodes[idx]);
+                var data = FileRead(MainFsInodes[idx]);
                 CRL = new iQueArrayFile<BbCrlHead>(data);
                 foreach (var crl in CRL)
                     crl.EndianSwap();
@@ -374,72 +338,6 @@ namespace iQueTool.Files
             // sig.db
 
             return true;
-        }
-
-        private bool ReadFilesystem()
-        {
-            FsHeaders = new List<iQueFsHeader>();
-            FsBlocks = new List<int>();
-            FsBadBlocks = new List<int>();
-            FsInodes = new List<List<iQueFsInode>>();
-            FsAllocationTables = new List<List<short>>();
-
-            int latestSeqNo = -1;
-            for (int i = 0; i < NUM_FAT_BLOCKS; i++)
-            {
-                var blockNum = (NUM_BLOCKS_IN_FAT - 1) - i; // read FAT area from end to beginning
-                SeekToBlock(blockNum);
-
-                io.Stream.Position += FS_HEADER_ADDR;
-                var header = io.Reader.ReadStruct<iQueFsHeader>();
-                header.EndianSwap();
-                if (header.Magic != MAGIC_BBFS) // todo: && header.Magic != MAGIC_BBFL, once we know what BBFL/"linked fats" actually are
-                    continue;
-
-                if(!SkipVerifyFsChecksums && InodesOffset == 0) // only care about fs checksum if this is a proper dump and we aren't using hacky InodesOffset hack
-                    if (!VerifyFsChecksum(header, blockNum))
-                    {
-                        FsBadBlocks.Add(blockNum);
-                        continue; // bad FS checksum :(
-                    }
-
-                FsHeaders.Add(header);
-                FsBlocks.Add(blockNum);
-
-                if (header.SeqNo > latestSeqNo)
-                {
-                    MainFs = header;
-                    MainFsBlock = blockNum;
-                    MainFsIndex = FsHeaders.Count - 1;
-                    latestSeqNo = header.SeqNo;
-                }
-
-                io.Stream.Position = blockNum * BLOCK_SZ;
-                var allocTable = new List<short>();
-                for (int y = 0; y < NUM_BLOCKS_IN_FAT; y++)
-                    allocTable.Add((short)(io.Reader.ReadUInt16().EndianSwap()));
-
-                int numEntries = NUM_FS_ENTRIES;
-                if (InodesOffset > 0)
-                {
-                    io.Stream.Position += InodesOffset; // skip weird truncated inode if needed
-                    numEntries--; // and now we'll have to read one less entry
-                }
-
-                // now begin reading inodes
-                var inodes = new List<iQueFsInode>();
-                for (int y = 0; y < numEntries; y++)
-                {
-                    var inode = io.Reader.ReadStruct<iQueFsInode>();
-                    inode.EndianSwap();
-                    inodes.Add(inode);
-                }
-
-                FsAllocationTables.Add(allocTable);
-                FsInodes.Add(inodes);
-            }
-
-            return latestSeqNo >= 0;
         }
 
         public void RepairFsChecksum(int fatBlockIdx)
@@ -461,7 +359,7 @@ namespace iQueTool.Files
                 RepairFsChecksum(block);
         }
 
-        public bool VerifyFsChecksum(iQueFsHeader fatHeader, int fatBlockIdx)
+        public bool VerifyFsChecksum(BbFat16 fatHeader, int fatBlockIdx)
         {
             io.Stream.Position = (fatBlockIdx * BLOCK_SZ);
 
@@ -671,11 +569,11 @@ namespace iQueTool.Files
             b.AppendLine($"MainFs (0x{(MainFsBlock * BLOCK_SZ):X} / block {MainFsBlock}):");
             b.AppendLine($"  SeqNo: {MainFs.SeqNo}");
             b.AppendLine($"  CheckSum: {MainFs.CheckSum}");
-            b.AppendLine($"  NumFiles: {MainFsInodes.FindAll(s => s.Valid == 1).Count}");
+            b.AppendLine($"  NumFiles: {MainFsInodes.FindAll(s => s.Type == 1).Count}");
             b.AppendLine();
             for(int i = 0; i < MainFsInodes.Count; i++)
             {
-                if (MainFsInodes[i].Valid != 1)
+                if (MainFsInodes[i].Type != 1)
                     continue;
                 b.AppendLine("  " + MainFsInodes[i].ToString(i));
             }
@@ -692,11 +590,11 @@ namespace iQueTool.Files
                     b.AppendLine($"Fs-{i} (0x{(FsBlocks[i] * BLOCK_SZ):X} / block {FsBlocks[i]})");
                     b.AppendLine($"  SeqNo: {FsHeaders[i].SeqNo}");
                     b.AppendLine($"  CheckSum: {FsHeaders[i].CheckSum}");
-                    b.AppendLine($"  NumFiles: {FsInodes[i].FindAll(s => s.Valid == 1).Count}");
+                    b.AppendLine($"  NumFiles: {FsInodes[i].FindAll(s => s.Type == 1).Count}");
                     b.AppendLine();
                     for (int y = 0; y < FsInodes[i].Count; y++)
                     {
-                        if (FsInodes[i][y].Valid != 1)
+                        if (FsInodes[i][y].Type != 1)
                             continue;
                         b.AppendLine("  " + FsInodes[i][y].ToString(y));
                     }
@@ -740,6 +638,358 @@ namespace iQueTool.Files
                 b.AppendLine("Failed to read iQueCertificate array from cert.sys :(");
 
             return b.ToString();
+        }
+
+        public void CreateModifiedInodes()
+        {
+            if (ModifiedInodes != null)
+                return;
+
+            ModifiedInodes = new List<BbInode>();
+            foreach(var node in MainFsInodes)
+            {
+                var newNode = new BbInode();
+                ModifiedInodes.Add(newNode.Copy(node));
+            }
+
+            ModifiedAllocTable = new List<short>();
+            foreach(var alloc in MainFsAllocTable)
+            {
+                ModifiedAllocTable.Add(alloc);
+            }
+
+            var newSeqNo = MainFs.SeqNo + 1;
+
+            MainFs = new BbFat16();
+            MainFs.Magic = MAGIC_BBFS;
+            MainFs.SeqNo = newSeqNo;
+            MainFs.Link = 0;
+            MainFs.CheckSum = 0;
+
+            FsHeaders.Add(MainFs);
+            FsInodes.Add(ModifiedInodes);
+            FsAllocationTables.Add(ModifiedAllocTable);
+
+            MainFsIndex = FsHeaders.Count - 1;
+        }
+
+        public byte[] GetChainData(short[] chain)
+        {
+            var data = new byte[chain.Length * 0x4000];
+
+            for (int i = 0; i < chain.Length; i++)
+            {
+                io.Stream.Position = chain[i] * BLOCK_SZ;
+
+                int numRead = BLOCK_SZ;
+
+                var blockData = io.Reader.ReadBytes(numRead);
+                Array.Copy(blockData, 0, data, i * BLOCK_SZ, numRead);
+            }
+
+            return data;
+        }
+
+        public byte[] FileRead(BbInode inode)
+        {
+            var data = new byte[inode.Size];
+            var chain = GetBlockChain(inode.BlockIdx);
+
+            for (int i = 0; i < chain.Length; i++)
+            {
+                io.Stream.Position = chain[i] * BLOCK_SZ;
+
+                int numRead = BLOCK_SZ;
+                if (i + 1 == chain.Length)
+                    numRead = (int)(inode.Size % BLOCK_SZ);
+                if (numRead == 0)
+                    numRead = BLOCK_SZ;
+
+                var blockData = io.Reader.ReadBytes(numRead);
+                Array.Copy(blockData, 0, data, i * BLOCK_SZ, numRead);
+            }
+
+            return data;
+        }
+
+        public bool FileDelete(string fileName)
+        {
+            BbInode foundNode = new BbInode();
+            bool found = false;
+            foreach(var node in MainFsInodes)
+            {
+                if(node.NameString == fileName)
+                {
+                    foundNode = node;
+                    found = true;
+                }
+            }
+
+            if (!found)
+                return false;
+
+            // make sure we have a modified inodes collection ready...
+            CreateModifiedInodes();
+
+            // find node in modified inodes..
+            found = false;
+            foreach (var node in MainFsInodes)
+            {
+                if (node.NameString == fileName)
+                {
+                    foundNode = node;
+                    found = true;
+                }
+            }
+            if (!found)
+                return false;
+
+            // deallocate all blocks used by the file
+            var chain = GetBlockChain(foundNode.BlockIdx);
+            foreach(var block in chain)
+                MainFsAllocTable[block] = FAT_BLOCK_FREE;
+
+            // remove file from inode collection
+            MainFsInodes.Remove(foundNode);
+
+            return true;
+        }
+
+        public bool FileDelete(BbInode node)
+        {
+            var name = node.NameString;
+            return FileDelete(name);
+        }
+
+        public short[] TryAllocateBlocks(int numBlocks)
+        {
+            var blockList = new List<short>();
+
+            for(int i = 0; i < numBlocks; i++)
+            {
+                bool foundUnused = false;
+                for(short block = NUM_SYS_AREA_BLOCKS; block < NUM_BLOCKS_IN_FAT; block++)
+                {
+                    if(MainFsAllocTable[block] == FAT_BLOCK_FREE && !blockList.Contains(block))
+                    {
+                        // found one!
+                        blockList.Add(block);
+                        foundUnused = true;
+                        break;
+                    }
+                }
+
+                if(!foundUnused)
+                    return null; // couldn't find enough unused blocks :(
+            }
+
+            // make sure we have a modified alloc table ready...
+            CreateModifiedInodes();
+
+            for (int i = 0; i < blockList.Count; i++)
+            {
+                var blockNum = blockList[i];
+                var nextBlock = FAT_BLOCK_LAST;
+                if (i < blockList.Count - 1)
+                    nextBlock = blockList[i + 1];
+
+                ModifiedAllocTable[blockNum] = nextBlock;
+            }
+
+            return blockList.ToArray();
+        }
+
+        public bool FileWrite(string fileName, byte[] fileData, ref BbInode newNode)
+        {
+            // remove any existing file with this name
+            FileDelete(fileName);
+
+            // make sure we have a modified inodes collection ready...
+            CreateModifiedInodes();
+
+            newNode = new BbInode();
+            newNode.NameString = fileName;
+            newNode.Type = 1;
+            newNode.Size = (uint)fileData.Length;
+
+            int numBlocks = (fileData.Length + (BLOCK_SZ - 1)) / BLOCK_SZ;
+            var blockList = TryAllocateBlocks(numBlocks);
+            if (blockList == null)
+                return false; // couldn't find enough unused blocks :(
+            
+            // start writing the file data!
+            for(int i = 0; i < numBlocks; i++)
+            {
+                int dataOffset = i * BLOCK_SZ;
+                int numWrite = BLOCK_SZ;
+                if (dataOffset + numWrite > fileData.Length)
+                    numWrite = fileData.Length % BLOCK_SZ;
+
+                SeekToBlock(blockList[i]);
+                io.Stream.Write(fileData, dataOffset, numWrite);
+            }
+            newNode.BlockIdx = blockList[0];
+
+            // add new inode to inode list...
+            // make seperate inode to provided one, to make sure nothing can change after adding it to inode list
+
+            var realNewNode = new BbInode();
+            realNewNode.Copy(newNode);
+            ModifiedInodes.Add(realNewNode);
+
+            var chain = GetBlockChain(newNode.BlockIdx);
+
+            // success!
+            return true;
+        }
+
+        private bool ReadFilesystem()
+        {
+            FsHeaders = new List<BbFat16>();
+            FsBlocks = new List<int>();
+            FsBadBlocks = new List<int>();
+            FsInodes = new List<List<BbInode>>();
+            FsAllocationTables = new List<List<short>>();
+
+            int latestSeqNo = -1;
+            for (int i = 0; i < NUM_FAT_BLOCKS; i++)
+            {
+                var blockNum = (NUM_BLOCKS_IN_FAT - 1) - i; // read FAT area from end to beginning
+                SeekToBlock(blockNum);
+
+                io.Stream.Position += FS_HEADER_ADDR;
+                var header = io.Reader.ReadStruct<BbFat16>();
+                header.EndianSwap();
+                if (header.Magic != MAGIC_BBFS) // todo: && header.Magic != MAGIC_BBFL, once we know what BBFL/"linked fats" actually are
+                    continue;
+
+                if (!SkipVerifyFsChecksums && InodesOffset == 0) // only care about fs checksum if this is a proper dump and we aren't using hacky InodesOffset hack
+                    if (!VerifyFsChecksum(header, blockNum))
+                    {
+                        FsBadBlocks.Add(blockNum);
+                        continue; // bad FS checksum :(
+                    }
+
+                FsHeaders.Add(header);
+                FsBlocks.Add(blockNum);
+
+                if (header.SeqNo > latestSeqNo)
+                {
+                    MainFs = header;
+                    MainFsBlock = blockNum;
+                    MainFsIndex = FsHeaders.Count - 1;
+                    latestSeqNo = header.SeqNo;
+                }
+
+                io.Stream.Position = blockNum * BLOCK_SZ;
+                var allocTable = new List<short>();
+                for (int y = 0; y < NUM_BLOCKS_IN_FAT; y++)
+                    allocTable.Add((short)(io.Reader.ReadUInt16().EndianSwap()));
+
+                int numEntries = NUM_FS_ENTRIES;
+                if (InodesOffset > 0)
+                {
+                    io.Stream.Position += InodesOffset; // skip weird truncated inode if needed
+                    numEntries--; // and now we'll have to read one less entry
+                }
+
+                // now begin reading inodes
+                var inodes = new List<BbInode>();
+                for (int y = 0; y < numEntries; y++)
+                {
+                    var inode = io.Reader.ReadStruct<BbInode>();
+                    inode.EndianSwap();
+                    inodes.Add(inode);
+                }
+                var invalidInodes = new List<int>();
+                for (int y = 0; y < inodes.Count; y++)
+                    if (!inodes[y].IsValid)
+                        invalidInodes.Add(y);
+
+                for(int y = invalidInodes.Count - 1; y >= 0; y--)
+                    inodes.RemoveAt(invalidInodes[y]);
+
+                FsAllocationTables.Add(allocTable);
+                FsInodes.Add(inodes);
+            }
+
+            return latestSeqNo >= 0;
+        }
+
+        public bool WriteFilesystem()
+        {
+            if (ModifiedInodes == null)
+                return true; // nothing to write...
+
+            int destBlock = -1;
+            int lowestSeqNo = -1;
+            int lowestSeqNoBlock = -1;
+            for (int i = 0; i < NUM_FAT_BLOCKS; i++)
+            {
+                var blockNum = (NUM_BLOCKS_IN_FAT - 1) - i; // read FAT area from end to beginning
+
+                // check bad block...
+                if (MainFsAllocTable[blockNum] == FAT_BLOCK_BAD)
+                    continue;
+
+                SeekToBlock(blockNum);
+
+                io.Stream.Position += FS_HEADER_ADDR;
+                var header = io.Reader.ReadStruct<BbFat16>();
+                header.EndianSwap();
+                if (header.Magic != MAGIC_BBFS) // todo: && header.Magic != MAGIC_BBFL, once we know what BBFL/"linked fats" actually are
+                {
+                    // no BBFS header here - perfect!
+                    destBlock = blockNum;
+                    break;
+                }
+                if(lowestSeqNo == -1 || lowestSeqNo > header.SeqNo)
+                {
+                    lowestSeqNo = header.SeqNo;
+                    lowestSeqNoBlock = blockNum;
+                }
+            }
+            
+            if (destBlock == -1) // all FS blocks are used, lets overwrite the oldest one
+                destBlock = lowestSeqNoBlock;
+
+            if (destBlock == -1)
+                return false; // wtf?
+
+            // null out block
+            SeekToBlock(destBlock);
+            io.Writer.Write(new byte[BLOCK_SZ]);
+
+            SeekToBlock(destBlock);
+
+            // write alloc table...
+            for (int i = 0; i < NUM_BLOCKS_IN_FAT; i++)
+                io.Writer.Write(ModifiedAllocTable[i].EndianSwap());
+
+            // write inodes...
+            foreach(var inode in ModifiedInodes)
+            {
+                inode.EndianSwap();
+                io.Writer.WriteStruct(inode);
+                inode.EndianSwap();
+            }
+            SeekToBlock(destBlock);
+            io.Stream.Position += FS_HEADER_ADDR;
+
+            // write FS header...
+            MainFs.EndianSwap();
+            io.Writer.WriteStruct(MainFs);
+            MainFs.EndianSwap();
+
+            // add FS as FS block...
+            if (!FsBlocks.Contains(destBlock))
+                FsBlocks.Add(destBlock);
+
+            // fix FS checksum...
+            RepairFsChecksum(destBlock);
+
+            // complete!
+            return true;
         }
     }
 }

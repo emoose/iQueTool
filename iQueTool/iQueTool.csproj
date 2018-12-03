@@ -60,7 +60,7 @@
     <Compile Include="Structs\iQueBlockSpare.cs" />
     <Compile Include="Structs\BbRsaCert.cs" />
     <Compile Include="Structs\BbCrlHead.cs" />
-    <Compile Include="Structs\iQueNandFs.cs" />
+    <Compile Include="Structs\BbFat16.cs" />
     <Compile Include="Structs\iQuePrivateData.cs" />
     <Compile Include="Structs\iQueSysAppSigArea.cs" />
     <Compile Include="Structs\OSBbSaGameMetaData.cs" />
