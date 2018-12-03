@@ -943,6 +943,11 @@ namespace iQueTool.Files
                     destBlock = blockNum;
                     break;
                 }
+                if(header.SeqNo == MainFs.SeqNo) // if this blocks seqNo is the same as our modded seqNo it's probably from this instance, so lets just overwrite that
+                {
+                    destBlock = blockNum;
+                    break;
+                }
                 if(lowestSeqNo == -1 || lowestSeqNo > header.SeqNo)
                 {
                     lowestSeqNo = header.SeqNo;

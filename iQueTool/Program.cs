@@ -24,6 +24,8 @@ namespace iQueTool
         static string addFiles = String.Empty;
         static string addFilesList = String.Empty;
 
+        static string deleteFiles = String.Empty;
+
         static bool extractKernel = false;
         
         static bool writeNewTicketFile = false;
@@ -70,8 +72,10 @@ namespace iQueTool
                 { "xt|extracttids=", v => extractTIDs = v },
                 { "xi|extractids=", v => extractIDs = v },
 
-                { "a|addfile=", v => addFiles = v },
+                { "a|addfile|addfiles=", v => addFiles = v },
                 { "al|addlist=", v => addFilesList = v },
+
+                { "d|deletefile|deletefiles=", v => deleteFiles = v },
 
                 { "xk|extractkernel", v => extractKernel = v != null },
                 { "fs|showallfs", v => showAllFsInfo = v != null },
@@ -90,7 +94,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.4: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.4a: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -122,12 +126,14 @@ namespace iQueTool
                 Console.WriteLine("Mode \"nand\":");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-x - extracts all files from NAND");
-                Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes");
+                //Console.WriteLine(fmt + "-xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes");
                 Console.WriteLine(fmt + "-xk (-extractkernel) - extract secure-kernel from NAND");
                 Console.WriteLine(fmt + "-fs (-showallfs) - shows info about all found FS blocks");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-a <comma-delimited-filepaths> - adds files to NAND");
                 Console.WriteLine(fmt + "-al (-addlist) <path-to-list-of-files> - adds line-seperated list of files to NAND");
+                Console.WriteLine();
+                Console.WriteLine(fmt + "-d <comma-delimited-filenames> - delete files from NAND FS");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA");
                 Console.WriteLine(fmt + fmt + "also takes bad-blocks into account and will work around them");
@@ -337,6 +343,35 @@ namespace iQueTool
                 else
                 {
                     Console.WriteLine("[!] -al (addlist) failed, no files to add!");
+                }
+            }
+
+            if(!string.IsNullOrEmpty(deleteFiles))
+            {
+                var filesToDelete = deleteFiles.Split(',');
+                int successful = 0;
+                foreach(var file in filesToDelete)
+                {
+                    // lazy way to get proper 8.3 name for this file..
+                    BbInode inode = new BbInode();
+                    inode.NameString = Path.GetFileName(file);
+
+                    if (nandFile.FileDelete(inode.NameString))
+                    {
+                        Console.WriteLine($"File {inode.NameString} removed from NAND!");
+                        successful++;
+                    }
+                    else
+                        Console.WriteLine($"Failed to remove file {inode.NameString} from NAND...");
+                }
+
+                if(successful > 0)
+                {
+                    Console.WriteLine("Writing updated FS to NAND...");
+                    if (nandFile.WriteFilesystem())
+                        Console.WriteLine($"Removed {successful} files successfully!");
+                    else
+                        Console.WriteLine("[!] Failed to write updated FS, couldn't find FS block to write?");
                 }
             }
 
