@@ -733,7 +733,7 @@ namespace iQueTool.Files
 
             // find node in modified inodes..
             found = false;
-            foreach (var node in MainFsInodes)
+            foreach (var node in ModifiedInodes)
             {
                 if (node.NameString == fileName)
                 {
@@ -747,10 +747,10 @@ namespace iQueTool.Files
             // deallocate all blocks used by the file
             var chain = GetBlockChain(foundNode.BlockIdx);
             foreach(var block in chain)
-                MainFsAllocTable[block] = FAT_BLOCK_FREE;
+                ModifiedAllocTable[block] = FAT_BLOCK_FREE;
 
             // remove file from inode collection
-            MainFsInodes.Remove(foundNode);
+            ModifiedInodes.Remove(foundNode);
 
             return true;
         }
@@ -801,16 +801,16 @@ namespace iQueTool.Files
 
         public bool FileWrite(string fileName, byte[] fileData, ref BbInode newNode)
         {
-            // remove any existing file with this name
-            FileDelete(fileName);
-
-            // make sure we have a modified inodes collection ready...
-            CreateModifiedInodes();
-
             newNode = new BbInode();
             newNode.NameString = fileName;
             newNode.Type = 1;
             newNode.Size = (uint)fileData.Length;
+
+            // remove any existing file with this name
+            FileDelete(newNode.NameString);
+
+            // make sure we have a modified inodes collection ready...
+            CreateModifiedInodes();
 
             int numBlocks = (fileData.Length + (BLOCK_SZ - 1)) / BLOCK_SZ;
             var blockList = TryAllocateBlocks(numBlocks);
