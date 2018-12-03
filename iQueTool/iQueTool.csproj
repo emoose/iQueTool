@@ -55,17 +55,19 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="Structs\BbLaunchMetadata.cs" />
+    <Compile Include="Structs\BbTicketHead.cs" />
     <Compile Include="Structs\iQueBlockSpare.cs" />
-    <Compile Include="Structs\iQueCertificate.cs" />
-    <Compile Include="Structs\iQueCertificateRevocation.cs" />
+    <Compile Include="Structs\BbRsaCert.cs" />
+    <Compile Include="Structs\BbCrlHead.cs" />
     <Compile Include="Structs\iQueNandFs.cs" />
     <Compile Include="Structs\iQuePrivateData.cs" />
     <Compile Include="Structs\iQueSysAppSigArea.cs" />
-    <Compile Include="Structs\iQueTitleData.cs" />
+    <Compile Include="Structs\OSBbSaGameMetaData.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Shared.cs" />
-    <Compile Include="Structs\iQueETicket.cs" />
+    <Compile Include="Structs\BbContentMetadataHead.cs" />
     <Compile Include="Structs\iQueUserData.cs" />
   </ItemGroup>
   <ItemGroup>

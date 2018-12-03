@@ -74,8 +74,8 @@ namespace iQueTool.Files
         public bool HasPrivateData = false;
         public iQuePrivateData PrivateData; // depot.sys
         
-        public iQueArrayFile<iQueTitleData> Tickets; // ticket.sys
-        public iQueArrayFile<iQueCertificateRevocation> CRL; // crl.sys
+        public iQueArrayFile<OSBbSaGameMetaData> Tickets; // ticket.sys
+        public iQueArrayFile<BbCrlHead> CRL; // crl.sys
         public iQueCertCollection Certs; // cert.sys
 
         public iQueNand(string filePath)
@@ -138,22 +138,22 @@ namespace iQueTool.Files
                 int lastDataBlock = 0;
                 int curDataBlock = NUM_SK_BLOCKS;
 
-                // read SA1 ticket area
-                int sa1TicketBlock = curDataBlock;
+                // read SA1 metadata area
+                int sa1MetadataBlock = curDataBlock;
                 io.Stream.Position = curDataBlock * BLOCK_SZ;
-                byte[] sa1TicketData = io.Reader.ReadBytes(BLOCK_SZ);
+                byte[] sa1MetaDataBytes = io.Reader.ReadBytes(BLOCK_SZ);
 
-                var sa1Ticket = Shared.BytesToStruct<iQueETicket>(sa1TicketData);
-                sa1Ticket.EndianSwap();
+                var sa1Metadata = Shared.BytesToStruct<BbContentMetadataHead>(sa1MetaDataBytes);
+                sa1Metadata.EndianSwap();
 
-                sksa.Writer.Write(sa1TicketData);
+                sksa.Writer.Write(sa1MetaDataBytes);
 
-                // get next good block after SA1 ticket (which will be SA1 final block)
+                // get next good block after SA1 metadata (which will be SA1 final block)
                 curDataBlock = GetNextGoodBlock(curDataBlock);
                 int sa1FinalDataBlock = curDataBlock;
 
-                int numDataBlocks = (int)(sa1Ticket.ContentSize / BLOCK_SZ);
-                byte[] sa1Data = new byte[sa1Ticket.ContentSize];
+                int numDataBlocks = (int)(sa1Metadata.ContentSize / BLOCK_SZ);
+                byte[] sa1Data = new byte[sa1Metadata.ContentSize];
                 for (int i = numDataBlocks - 1; i >= 0; i--)
                 {
                     io.Stream.Position = curDataBlock * BLOCK_SZ;
@@ -165,24 +165,24 @@ namespace iQueTool.Files
                 }
                 sksa.Writer.Write(sa1Data);
 
-                // read SA2 ticket area
-                int sa2TicketBlock = curDataBlock;
+                // read SA2 metadata area
+                int sa2MetadataBlock = curDataBlock;
                 io.Stream.Position = curDataBlock * BLOCK_SZ;
-                byte[] sa2TicketData = io.Reader.ReadBytes(BLOCK_SZ);
+                byte[] sa2MetadataBytes = io.Reader.ReadBytes(BLOCK_SZ);
 
-                var sa2Ticket = Shared.BytesToStruct<iQueETicket>(sa2TicketData);
-                sa2Ticket.EndianSwap();
+                var sa2Metadata = Shared.BytesToStruct<BbContentMetadataHead>(sa2MetadataBytes);
+                sa2Metadata.EndianSwap();
 
-                if(sa2Ticket.AuthorityString.StartsWith("Root")) // if SA2 is valid...
+                if(sa2Metadata.AuthorityString.StartsWith("Root")) // if SA2 is valid...
                 {
-                    sksa.Writer.Write(sa2TicketData);
+                    sksa.Writer.Write(sa2MetadataBytes);
 
-                    // get next good block after SA2 ticket (which will be SA2 final block)
+                    // get next good block after SA2 metadata (which will be SA2 final block)
                     curDataBlock = GetNextGoodBlock(curDataBlock);
                     int sa2FinalDataBlock = curDataBlock;
 
-                    numDataBlocks = (int)(sa2Ticket.ContentSize / BLOCK_SZ);
-                    byte[] sa2Data = new byte[sa2Ticket.ContentSize];
+                    numDataBlocks = (int)(sa2Metadata.ContentSize / BLOCK_SZ);
+                    byte[] sa2Data = new byte[sa2Metadata.ContentSize];
                     for (int i = numDataBlocks - 1; i >= 0; i--)
                     {
                         io.Stream.Position = curDataBlock * BLOCK_SZ;
@@ -227,7 +227,7 @@ namespace iQueTool.Files
             curDataBlock = GetNextGoodBlock(curDataBlock);
             int sa1FinalDataBlock = curDataBlock;
 
-            int numDataBlocks = (int)(sksa.SA1SigArea.Ticket.ContentSize / BLOCK_SZ);
+            int numDataBlocks = (int)(sksa.SA1SigArea.ContentMetadata.ContentSize / BLOCK_SZ);
             for (int i = numDataBlocks - 1; i >= 0; i--)
             {
                 byte[] data = new byte[BLOCK_SZ];
@@ -253,7 +253,7 @@ namespace iQueTool.Files
                 curDataBlock = GetNextGoodBlock(curDataBlock);
                 int sa2FinalDataBlock = curDataBlock;
 
-                numDataBlocks = (int)(sksa.SA2SigArea.Ticket.ContentSize / BLOCK_SZ);
+                numDataBlocks = (int)(sksa.SA2SigArea.ContentMetadata.ContentSize / BLOCK_SZ);
                 for (int i = numDataBlocks - 1; i >= 0; i--)
                 {
                     byte[] data = new byte[BLOCK_SZ];
@@ -354,7 +354,7 @@ namespace iQueTool.Files
             if(idx >= 0)
             {
                 var data = GetInodeData(MainFsInodes[idx]);
-                Tickets = new iQueArrayFile<iQueTitleData>(data);
+                Tickets = new iQueArrayFile<OSBbSaGameMetaData>(data);
                 for (int i = 0; i < Tickets.Count; i++)
                     Tickets[i] = Tickets[i].EndianSwap();
             }
@@ -363,7 +363,7 @@ namespace iQueTool.Files
             if (idx >= 0)
             {
                 var data = GetInodeData(MainFsInodes[idx]);
-                CRL = new iQueArrayFile<iQueCertificateRevocation>(data);
+                CRL = new iQueArrayFile<BbCrlHead>(data);
                 foreach (var crl in CRL)
                     crl.EndianSwap();
             }
@@ -528,7 +528,7 @@ namespace iQueTool.Files
                     int sa1FinalDataBlock = curDataBlock;
 
                     // loop through SA1 in reverse and write SA data block SAData fields
-                    int numDataBlocks = (int)(SKSA.SA1SigArea.Ticket.ContentSize / BLOCK_SZ);
+                    int numDataBlocks = (int)(SKSA.SA1SigArea.ContentMetadata.ContentSize / BLOCK_SZ);
                     for (int i = numDataBlocks - 1; i >= 0; i--)
                     {
                         lastDataBlock = curDataBlock;
@@ -581,7 +581,7 @@ namespace iQueTool.Files
                         int sa2FinalDataBlock = curDataBlock;
 
                         // loop through SA2 in reverse and write SA2 data block SAData fields
-                        numDataBlocks = (int)(SKSA.SA2SigArea.Ticket.ContentSize / BLOCK_SZ);
+                        numDataBlocks = (int)(SKSA.SA2SigArea.ContentMetadata.ContentSize / BLOCK_SZ);
                         for (int i = numDataBlocks - 1; i >= 0; i--)
                         {
                             lastDataBlock = curDataBlock;

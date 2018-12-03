@@ -49,9 +49,9 @@ namespace iQueTool
             if (iQueCertCollection.MainCollection != null)
             {
                 if (File.Exists("ique_root.bin"))
-                    iQueCertCollection.MainCollection.Add(new iQueCertificate("", "Root", File.ReadAllBytes("ique_root.bin")));
+                    iQueCertCollection.MainCollection.Add(new BbRsaCert("", "Root", File.ReadAllBytes("ique_root.bin")));
                 else if (File.Exists(@"D:\ique_root.bin"))
-                    iQueCertCollection.MainCollection.Add(new iQueCertificate("", "Root", File.ReadAllBytes(@"D:\ique_root.bin")));
+                    iQueCertCollection.MainCollection.Add(new BbRsaCert("", "Root", File.ReadAllBytes(@"D:\ique_root.bin")));
             }
 
             const string fmt = "   ";
@@ -158,11 +158,11 @@ namespace iQueTool
                 extraPath = extraArgs[2];
 
             if (mode == "tickets")
-                ModeArrayFile<iQueTitleData>();
+                ModeArrayFile<OSBbSaGameMetaData>();
             else if (mode == "certs")
-                ModeArrayFile<iQueCertificate>();
+                ModeArrayFile<BbRsaCert>();
             else if (mode == "crl")
-                ModeArrayFile<iQueCertificateRevocation>();
+                ModeArrayFile<BbCrlHead>();
             else if (mode == "nand")
                 ModeNAND();
             else if (mode == "sparefix")
@@ -361,12 +361,12 @@ namespace iQueTool
 
             for(int i = 0; i < arrayFile.Count; i++)
             {
-                if (type == typeof(iQueTitleData))
-                    arrayFile[i] = (T)(object)((iQueTitleData)(object)arrayFile[i]).EndianSwap();
-                else if (type == typeof(iQueCertificate))
-                    arrayFile[i] = (T)(object)((iQueCertificate)(object)arrayFile[i]).EndianSwap();
-                else if (type == typeof(iQueCertificateRevocation))
-                    arrayFile[i] = (T)(object)((iQueCertificateRevocation)(object)arrayFile[i]).EndianSwap();
+                if (type == typeof(OSBbSaGameMetaData))
+                    arrayFile[i] = (T)(object)((OSBbSaGameMetaData)(object)arrayFile[i]).EndianSwap();
+                else if (type == typeof(BbRsaCert))
+                    arrayFile[i] = (T)(object)((BbRsaCert)(object)arrayFile[i]).EndianSwap();
+                else if (type == typeof(BbCrlHead))
+                    arrayFile[i] = (T)(object)((BbCrlHead)(object)arrayFile[i]).EndianSwap();
             }
 
             var info = arrayFile.ToString(true);
@@ -380,7 +380,7 @@ namespace iQueTool
                 Console.WriteLine($"Wrote {type.Name} info to {filePath}.txt");
             }
             
-            if((!String.IsNullOrEmpty(extractContentIds) || !String.IsNullOrEmpty(extractTIDs)) && type != typeof(iQueTitleData))
+            if((!String.IsNullOrEmpty(extractContentIds) || !String.IsNullOrEmpty(extractTIDs)) && type != typeof(OSBbSaGameMetaData))
             {
                 Console.WriteLine("Warning: using -xc or -xt in wrong mode");
                 Console.WriteLine("(those params are only valid for the \"ticket\" mode)");
@@ -405,7 +405,7 @@ namespace iQueTool
                     extractEntries = arrayFile;
                 else
                 {
-                    if (!String.IsNullOrEmpty(extractContentIds) && type == typeof(iQueTitleData))
+                    if (!String.IsNullOrEmpty(extractContentIds) && type == typeof(OSBbSaGameMetaData))
                     {
                         var ids = extractContentIds.Split(',');
                         foreach (var id in ids)
@@ -417,7 +417,7 @@ namespace iQueTool
                                 continue;
                             }
 
-                            var tickets = arrayFile.FindAll(t => ((iQueTitleData)(object)t).Ticket.ContentId == intID);
+                            var tickets = arrayFile.FindAll(t => ((OSBbSaGameMetaData)(object)t).ContentMetadata.ContentId == intID);
                             if (tickets.Count <= 0)
                             {
                                 Console.WriteLine($"extractContentIds: failed to find ticket with content ID {id}!");
@@ -429,7 +429,7 @@ namespace iQueTool
                         }
                     }
 
-                    if (!String.IsNullOrEmpty(extractTIDs) && type == typeof(iQueTitleData))
+                    if (!String.IsNullOrEmpty(extractTIDs) && type == typeof(OSBbSaGameMetaData))
                     {
                         var ids = extractTIDs.Split(',');
                         foreach (var id in ids)
@@ -441,7 +441,7 @@ namespace iQueTool
                                 continue;
                             }
 
-                            var tickets = arrayFile.FindAll(t => ((iQueTitleData)(object)t).TicketId == intID);
+                            var tickets = arrayFile.FindAll(t => ((OSBbSaGameMetaData)(object)t).Ticket.TicketId == intID);
                             if (tickets.Count <= 0)
                             {
                                 Console.WriteLine($"extractTIDs: failed to find ticket with TID {id}!");
@@ -496,23 +496,23 @@ namespace iQueTool
                         var entryType = "unk";
                         var name = i.ToString();
                         byte[] data = null;
-                        if (type == typeof(iQueTitleData))
+                        if (type == typeof(OSBbSaGameMetaData))
                         {
                             entryType = "ticket";
-                            name = ((iQueTitleData)(object)entry).TicketUID;
-                            data = ((iQueTitleData)(object)entry).GetBytes();
+                            name = ((OSBbSaGameMetaData)(object)entry).TicketUID;
+                            data = ((OSBbSaGameMetaData)(object)entry).GetBytes();
                         }
-                        else if (type == typeof(iQueCertificate))
+                        else if (type == typeof(BbRsaCert))
                         {
                             entryType = "cert";
-                            name = ((iQueCertificate)(object)entry).CertNameString;
-                            data = ((iQueCertificate)(object)entry).GetBytes();
+                            name = ((BbRsaCert)(object)entry).CertNameString;
+                            data = ((BbRsaCert)(object)entry).GetBytes();
                         }
-                        else if (type == typeof(iQueCertificateRevocation))
+                        else if (type == typeof(BbCrlHead))
                         {
                             entryType = "crl";
-                            name = ((iQueCertificateRevocation)(object)entry).CertNameString;
-                            data = ((iQueCertificateRevocation)(object)entry).GetBytes();
+                            name = ((BbCrlHead)(object)entry).CertNameString;
+                            data = ((BbCrlHead)(object)entry).GetBytes();
                         }
 
                         var outputPath = $"{entryType}-{name}.dat";
@@ -535,20 +535,20 @@ namespace iQueTool
                             var entry = extractEntries[i];
                             var name = i.ToString();
                             byte[] data = null;
-                            if (type == typeof(iQueTitleData))
+                            if (type == typeof(OSBbSaGameMetaData))
                             {
-                                name = ((iQueTitleData)(object)entry).TicketUID;
-                                data = ((iQueTitleData)(object)entry).GetBytes();
+                                name = ((OSBbSaGameMetaData)(object)entry).TicketUID;
+                                data = ((OSBbSaGameMetaData)(object)entry).GetBytes();
                             }
-                            else if (type == typeof(iQueCertificate))
+                            else if (type == typeof(BbRsaCert))
                             {
-                                name = ((iQueCertificate)(object)entry).CertNameString;
-                                data = ((iQueCertificate)(object)entry).GetBytes();
+                                name = ((BbRsaCert)(object)entry).CertNameString;
+                                data = ((BbRsaCert)(object)entry).GetBytes();
                             }
-                            else if (type == typeof(iQueCertificateRevocation))
+                            else if (type == typeof(BbCrlHead))
                             {
-                                name = ((iQueCertificateRevocation)(object)entry).CertNameString;
-                                data = ((iQueCertificateRevocation)(object)entry).GetBytes();
+                                name = ((BbCrlHead)(object)entry).CertNameString;
+                                data = ((BbCrlHead)(object)entry).GetBytes();
                             }
                             Console.WriteLine($"Writing entry {name}");
                             outputIO.Writer.Write(data);

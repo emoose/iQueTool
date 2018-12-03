@@ -6,25 +6,37 @@ using iQueTool.Files;
 namespace iQueTool.Structs
 {
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
-    public struct iQueCertificateRevocation
+    public struct BbRsaCert
     {
+        /* 0x000 */ public uint CertType;
+        /* 0x004 */ public uint SigType; // 0 if signature is 2048-bit, 1 if sig is 4096-bit?
+        /* 0x008 */ public uint Date; // timestamp?
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
+        /* 0x00C */ public char[] Authority;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
+        /* 0x04C */ public char[] CertName;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x100)]
+        /* 0x08C */ public byte[] PublicKeyModulus;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+        /* 0x18C */ public byte[] PublicKeyExponent;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x200)]
-        public byte[] Signature; // doesn't seem to validate atm... probably checking wrong region
+        /* 0x190 */ public byte[] Signature; // signature of 0x0 - 0x190 made using Authority key
+        
 
-        public uint Unk200;
-        public uint Unk204;
-        public uint Unk208;
-        public uint Unk20C;
+        public BbRsaCert(string authority, string certName, byte[] modulus)
+        {
+            CertType = 0;
+            SigType = 0;
+            Date = 0;
+            Authority = authority.ToCharArray();
+            CertName = certName.ToCharArray();
 
-        public uint Timestamp;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
-        public char[] Authority;
-
-        public uint Unk254;
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x40)]
-        public char[] CertName;
+            PublicKeyModulus = modulus;
+            PublicKeyExponent = new byte[] { 0x00, 0x01, 0x00, 0x01 };
+            Signature = new byte[0x200];
+        }
 
         public string AuthorityString
         {
@@ -42,14 +54,6 @@ namespace iQueTool.Structs
             }
         }
 
-        public DateTime TimestampDateTime
-        {
-            get
-            {
-                return Shared.UnixTimeStampToDateTime(Timestamp);
-            }
-        }
-
         public byte[] DecryptedSignature
         {
             get
@@ -57,7 +61,7 @@ namespace iQueTool.Structs
                 if (iQueCertCollection.MainCollection == null)
                     return null;
 
-                iQueCertificate authority;
+                BbRsaCert authority;
                 if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
                     return null;
 
@@ -72,14 +76,12 @@ namespace iQueTool.Structs
                 if (iQueCertCollection.MainCollection == null)
                     return false;
 
-                iQueCertificate authority;
+                BbRsaCert authority;
                 if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
                     return false;
 
                 byte[] data = Shared.StructToBytes(this);
-                byte[] dataNoSig = new byte[0x98];
-
-                Array.Copy(data, 0x200, dataNoSig, 0, 0x98); // remove first 0x200 bytes
+                Array.Resize(ref data, 0x190);
 
                 var res = Shared.iQueSignatureVerify(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
                 if (res)
@@ -88,23 +90,18 @@ namespace iQueTool.Structs
                 // sig verify failed, try endian swapping
                 EndianSwap();
                 data = Shared.StructToBytes(this);
-                Array.Copy(data, 0x200, dataNoSig, 0, 0x98);
+                Array.Resize(ref data, 0x190);
                 EndianSwap();
 
                 return Shared.iQueSignatureVerify(data, Signature, authority.PublicKeyModulus, authority.PublicKeyExponent);
             }
         }
 
-        public iQueCertificateRevocation EndianSwap()
+        public BbRsaCert EndianSwap()
         {
-            Unk200 = Unk200.EndianSwap();
-            Unk204 = Unk204.EndianSwap();
-            Unk208 = Unk208.EndianSwap();
-            Unk20C = Unk20C.EndianSwap();
-
-            Timestamp = Timestamp.EndianSwap();
-
-            Unk254 = Unk254.EndianSwap();
+            CertType = CertType.EndianSwap();
+            SigType = SigType.EndianSwap();
+            Date = Date.EndianSwap();
 
             return this;
         }
@@ -122,17 +119,30 @@ namespace iQueTool.Structs
             return ToString(true);
         }
 
-        public string ToString(bool formatted, string header = "iQueCertificateRevocation")
+        public string ToString(bool formatted, string header = "BbRsaCert")
         {
             var b = new StringBuilder();
             if (!string.IsNullOrEmpty(header))
                 b.AppendLine($"{header}:");
 
             string fmt = formatted ? "    " : "";
-            
-            b.AppendLineSpace(fmt + $"CertName: {CertNameString}");
+
+            if (iQueCertCollection.MainCollection == null)
+                b.AppendLineSpace(fmt + $"(Unable to verify RSA signature: cert.sys not found)");
+            else
+                b.AppendLineSpace(fmt + $"(RSA signature {(IsSignatureValid ? "validated" : "appears invalid")})");
+
+            b.AppendLineSpace(fmt + $"CertName: {CertNameString} ({(string.IsNullOrEmpty(AuthorityString) ? CertNameString : $"{AuthorityString}-{CertNameString}")})");
+            b.AppendLineSpace(fmt + $"CertType: {CertType}");
+            b.AppendLineSpace(fmt + $"SigType: {SigType}");
+            b.AppendLineSpace(fmt + $"Date: {Date}");
+
+            b.AppendLine();
             b.AppendLineSpace(fmt + $"Authority: {AuthorityString}");
-            b.AppendLineSpace(fmt + $"Timestamp: {TimestampDateTime} ({Timestamp})");
+
+            b.AppendLine();
+            b.AppendLineSpace(fmt + "PublicKeyModulus:" + Environment.NewLine + fmt + PublicKeyModulus.ToHexString());
+            b.AppendLineSpace(fmt + "PublicKeyExponent:" + Environment.NewLine + fmt + PublicKeyExponent.ToHexString());
 
             b.AppendLine();
             b.AppendLineSpace(fmt + "Signature:" + Environment.NewLine + fmt + Signature.ToHexString());
@@ -144,15 +154,7 @@ namespace iQueTool.Structs
                 b.AppendLineSpace(fmt + "Expected Hash (decrypted from signature):" + Environment.NewLine + fmt + decSig.ToHexString());
             }
 
-            b.AppendLine();
-            b.AppendLineSpace(fmt + $"Unk200: 0x{Unk200:X}");
-            b.AppendLineSpace(fmt + $"Unk204: 0x{Unk204:X}");
-            b.AppendLineSpace(fmt + $"Unk208: 0x{Unk208:X}");
-            b.AppendLineSpace(fmt + $"Unk20C: 0x{Unk20C:X}");
-            b.AppendLine();
-            b.AppendLineSpace(fmt + $"Unk254: 0x{Unk254:X}");
-
             return b.ToString();
         }
-    }
+    }    
 }

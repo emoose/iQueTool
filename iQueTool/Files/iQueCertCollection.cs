@@ -5,7 +5,7 @@ using iQueTool.Structs;
 
 namespace iQueTool.Files
 {
-    public class iQueCertCollection : List<iQueCertificate>
+    public class iQueCertCollection : List<BbRsaCert>
     {
         private IO io;
         public string FilePath;
@@ -30,7 +30,7 @@ namespace iQueTool.Files
             var numEntries = io.Reader.ReadUInt32().EndianSwap();
             for (uint i = 0; i < numEntries; i++)
             {
-                var entry = io.Reader.ReadStruct<iQueCertificate>();
+                var entry = io.Reader.ReadStruct<BbRsaCert>();
                 entry.EndianSwap();
                 Add(entry);
             }
@@ -55,7 +55,7 @@ namespace iQueTool.Files
             return b.ToString();
         }
 
-        public bool GetCertificate(string certName, out iQueCertificate cert)
+        public bool GetCertificate(string certName, out BbRsaCert cert)
         {
             foreach(var c in this)
             {
@@ -66,7 +66,7 @@ namespace iQueTool.Files
                 }
             }
 
-            cert = new iQueCertificate();
+            cert = new BbRsaCert();
             return false;
         }
     }

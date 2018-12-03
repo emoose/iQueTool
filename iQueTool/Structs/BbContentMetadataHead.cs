@@ -7,7 +7,7 @@ using System.Text;
 namespace iQueTool.Structs
 {
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
-    public struct iQueETicket
+    public struct BbContentMetadataHead
     {
         /* 0x2800 */ public uint UnusedPadding; // always 0?
 
@@ -126,7 +126,7 @@ namespace iQueTool.Structs
                 if (iQueCertCollection.MainCollection == null)
                     return null;
 
-                iQueCertificate authority;
+                BbRsaCert authority;
                 if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
                     return null;
 
@@ -141,7 +141,7 @@ namespace iQueTool.Structs
                 if (iQueCertCollection.MainCollection == null)
                     return false;
 
-                iQueCertificate authority;
+                BbRsaCert authority;
                 if (!iQueCertCollection.MainCollection.GetCertificate(AuthorityString, out authority))
                     return false;
                 
@@ -191,7 +191,7 @@ namespace iQueTool.Structs
             return ToString(false);
         }
 
-        public string ToString(bool formatted, string header = "iQueETicket")
+        public string ToString(bool formatted, string header = "BbContentMetaDataHead")
         {
             var b = new StringBuilder();
             if (!string.IsNullOrEmpty(header))

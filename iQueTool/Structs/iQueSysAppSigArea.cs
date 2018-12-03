@@ -15,9 +15,9 @@ namespace iQueTool.Structs
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct iQueSysAppSigArea
     {
-        public iQueETicket Ticket;
-        public iQueCertificate Certificate;
-        public iQueCertificate Authority;
+        public BbContentMetadataHead ContentMetadata;
+        public BbRsaCert Certificate;
+        public BbRsaCert Authority;
         
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x38)]
         public byte[] Unk8CC;
@@ -29,7 +29,7 @@ namespace iQueTool.Structs
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
         public byte[] Unk910;
 
-        public iQueCertificateRevocation Revocation;
+        public BbCrlHead Revocation;
 
         public bool IsValid
         {
@@ -41,7 +41,7 @@ namespace iQueTool.Structs
 
         public void EndianSwap()
         {
-            Ticket.EndianSwap();
+            ContentMetadata.EndianSwap();
             Certificate.EndianSwap();
             Authority.EndianSwap();
 
@@ -84,7 +84,7 @@ namespace iQueTool.Structs
             b.AppendLineSpace(fmt + "Unk910:" + Environment.NewLine + fmt + Unk910.ToHexString());
 
             b.AppendLine();
-            b.AppendLine(Ticket.ToString(formatted, header + ".iQueETicket"));
+            b.AppendLine(ContentMetadata.ToString(formatted, header + ".BbContentMetadataHead"));
             b.AppendLine();
             b.AppendLine(Certificate.ToString(formatted, header + ".iQueCertificate"));
             b.AppendLine();

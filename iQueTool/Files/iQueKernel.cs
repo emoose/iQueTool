@@ -31,7 +31,7 @@ namespace iQueTool.Files
         {
             get
             {
-                return SA2Addr > -1 && SA2SigArea.Ticket.ContentSize > 0 && SA2SigArea.IsValid; 
+                return SA2Addr > -1 && SA2SigArea.ContentMetadata.ContentSize > 0 && SA2SigArea.IsValid; 
             }
         }
 
@@ -68,15 +68,15 @@ namespace iQueTool.Files
             SA1SigArea = io.Reader.ReadStruct<iQueSysAppSigArea>();
             SA1SigArea.EndianSwap();
 
-            if (SA1SigArea.Ticket.ContentSize == 0 || !SA1SigArea.IsValid)
+            if (SA1SigArea.ContentMetadata.ContentSize == 0 || !SA1SigArea.IsValid)
                 return true; // SA1 has no data
 
             // read SA1 data
             io.Stream.Position = SA1Addr + SIGAREA_SZ;
-            SA1Data = io.Reader.ReadBytes((int)SA1SigArea.Ticket.ContentSize);
+            SA1Data = io.Reader.ReadBytes((int)SA1SigArea.ContentMetadata.ContentSize);
 
             // check if there might be a valid SA2 area
-            SA2Addr = SA1Addr + SIGAREA_SZ + SA1SigArea.Ticket.ContentSize;
+            SA2Addr = SA1Addr + SIGAREA_SZ + SA1SigArea.ContentMetadata.ContentSize;
             if(SA2Addr + SIGAREA_SZ_RAW >= io.Stream.Length)
             {
                 SA2Addr = -1;
@@ -89,11 +89,11 @@ namespace iQueTool.Files
             SA2SigArea.EndianSwap();
 
             if (!SA2IsValid)
-                return true; // don't try reading SA2 data if ticket isn't valid
+                return true; // don't try reading SA2 data if metadata isn't valid
 
             // read SA2 data
             io.Stream.Position = SA2Addr + SIGAREA_SZ;
-            SA2Data = io.Reader.ReadBytes((int)SA2SigArea.Ticket.ContentSize);
+            SA2Data = io.Reader.ReadBytes((int)SA2SigArea.ContentMetadata.ContentSize);
 
             return true;
         }
@@ -120,18 +120,18 @@ namespace iQueTool.Files
         {
             io.Stream.Position = startAddr + SIGAREA_ADDR;
             byte[] sa1sig = io.Reader.ReadBytes(SIGAREA_SZ);
-            byte[] sa1 = io.Reader.ReadBytes((int)SA1SigArea.Ticket.ContentSize);
+            byte[] sa1 = io.Reader.ReadBytes((int)SA1SigArea.ContentMetadata.ContentSize);
 
-            File.WriteAllBytes(extPath + $".{SA1SigArea.Ticket.ContentId}-sa1sig", sa1sig);
+            File.WriteAllBytes(extPath + $".{SA1SigArea.ContentMetadata.ContentId}-sa1sig", sa1sig);
             if(sa1.Length > 0)
-                File.WriteAllBytes(extPath + $".{SA1SigArea.Ticket.ContentId}-sa1", sa1);
+                File.WriteAllBytes(extPath + $".{SA1SigArea.ContentMetadata.ContentId}-sa1", sa1);
             if (SA2IsValid)
             {
                 byte[] sa2sig = io.Reader.ReadBytes(SIGAREA_SZ);
-                byte[] sa2 = io.Reader.ReadBytes((int)SA2SigArea.Ticket.ContentSize);
-                File.WriteAllBytes(extPath + $".{SA2SigArea.Ticket.ContentId}-sa2sig", sa2sig);
+                byte[] sa2 = io.Reader.ReadBytes((int)SA2SigArea.ContentMetadata.ContentSize);
+                File.WriteAllBytes(extPath + $".{SA2SigArea.ContentMetadata.ContentId}-sa2sig", sa2sig);
                 if (sa2.Length > 0)
-                    File.WriteAllBytes(extPath + $".{SA2SigArea.Ticket.ContentId}-sa2", sa2);
+                    File.WriteAllBytes(extPath + $".{SA2SigArea.ContentMetadata.ContentId}-sa2", sa2);
             }
         }
     }
