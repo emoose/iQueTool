@@ -90,7 +90,7 @@ namespace iQueTool
 
             var extraArgs = p.Parse(args);
 
-            Console.WriteLine("iQueTool 0.3a: iQue Player file manipulator");
+            Console.WriteLine("iQueTool 0.4: iQue Player file manipulator");
 
             if (printHelp || extraArgs.Count <= 1)
             {
@@ -126,7 +126,7 @@ namespace iQueTool
                 Console.WriteLine(fmt + "-xk (-extractkernel) - extract secure-kernel from NAND");
                 Console.WriteLine(fmt + "-fs (-showallfs) - shows info about all found FS blocks");
                 Console.WriteLine();
-                Console.WriteLine(fmt + "-a <comma-delimited-filepaths> - adds file to NAND");
+                Console.WriteLine(fmt + "-a <comma-delimited-filepaths> - adds files to NAND");
                 Console.WriteLine(fmt + "-al (-addlist) <path-to-list-of-files> - adds line-seperated list of files to NAND");
                 Console.WriteLine();
                 Console.WriteLine(fmt + "-uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA");

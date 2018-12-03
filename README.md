@@ -2,7 +2,7 @@ iQueTool
 ========
 
 ```
-iQueTool 0.3b: iQue Player file manipulator
+iQueTool 0.4: iQue Player file manipulator
 Usage  : iquetool.exe [mode] [parameters] [filepath]
 
 Valid modes: nand / tickets / certs / crl / sparefix
@@ -31,6 +31,9 @@ Mode "nand":
    -xi (-extractids) <comma-delimited-ids> - extract inodes with these indexes
    -xk (-extractkernel) - extract secure-kernel from NAND
    -fs (-showallfs) - shows info about all found FS blocks
+   
+   -a <comma-delimited-filepaths> - adds files to NAND
+   -al (-addlist) <path-to-list-of-files> - adds line-seperated list of files to NAND
 
    -uk (-updatekernel) <sksa-path> - updates NAND with the given (cache) SKSA
       also takes bad-blocks into account and will work around them
